@@ -7,7 +7,7 @@ import {
   isGstValid,
   resolveApprovalStatus,
 } from "../utils/otpUtils";
-import { sendNewRegistrationEmail, sendOtpEmail } from "../utils/sendgrid";
+import { sendNewRegistrationEmail, sendOtpEmail } from "../utils/email";
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 
@@ -197,11 +197,11 @@ const sendOtpHandler = async (
 
     await OtpRecord.create({ email: emailLower, otp, expiresAt });
 
-    // ── Send OTP via SendGrid ──
+    // ── Send OTP via Resend ──
     try {
       await sendOtpEmail(emailLower, otp);
     } catch (emailErr: any) {
-      console.warn("[SendGrid Warning] Failed to send OTP email:", emailErr.message);
+      console.warn("[Resend Warning] Failed to send OTP email:", emailErr.message);
       if (process.env.NODE_ENV !== "development") {
         // Rethrow the error in production so the request fails
         throw emailErr;
