@@ -163,6 +163,16 @@ const sendOtpHandler = async (
 
     const emailLower = email.toLowerCase();
 
+    // ── Check for Play Store Reviewer bypass ──
+    const isPlayStoreReviewer = emailLower === "playstore@thumpinfinity.com" || emailLower === "googleplay@thumpinfinity.com";
+    if (isPlayStoreReviewer) {
+      return res.status(200).json({
+        success: true,
+        message: `OTP sent to ${emailLower} (Demo Bypass Enabled)`,
+        otp: "252002",
+      });
+    }
+
     // ── Resend cooldown: check if a recent OTP was already sent ──
     const recentOtp = await OtpRecord.findOne({
       email: emailLower,
@@ -258,6 +268,69 @@ const verifyOtpHandler = async (
     }
 
     const emailLower = email.toLowerCase();
+
+    // ── Check for Play Store Reviewer bypass ──
+    const isPlayStoreReviewer = emailLower === "playstore@thumpinfinity.com" || emailLower === "googleplay@thumpinfinity.com";
+    if (isPlayStoreReviewer && otp === "252002") {
+      let user = await User.findOne({ email: emailLower });
+      let isNewUser = false;
+
+      if (!user) {
+        user = await User.create({
+          email: emailLower,
+          isEmailVerified: true,
+          isProfileComplete: true,
+          phone: "9999999999",
+          role: "customer",
+          approvalStatus: "approved",
+          profile: {
+            contactName: "Google Play Reviewer",
+            city: "Delhi",
+            state: "Delhi",
+            gstNumber: "07AAAAA1111A1Z1",
+            addressLine1: "123 Test Street",
+            pincode: "110001",
+          },
+        });
+        isNewUser = true;
+      } else {
+        // Guarantee reviewer test account details are always complete and approved
+        user.isEmailVerified = true;
+        user.isProfileComplete = true;
+        user.approvalStatus = "approved";
+        if (!user.phone) user.phone = "9999999999";
+        if (!user.profile || !user.profile.contactName) {
+          user.profile = {
+            contactName: "Google Play Reviewer",
+            city: "Delhi",
+            state: "Delhi",
+            gstNumber: "07AAAAA1111A1Z1",
+            addressLine1: "123 Test Street",
+            pincode: "110001",
+          };
+        }
+        await user.save();
+      }
+
+      const token: string = signToken(user._id);
+
+      return res.status(200).json({
+        success: true,
+        message: "OTP verified successfully (Demo Bypass Enabled).",
+        token,
+        isNewUser,
+        isProfileComplete: user.isProfileComplete,
+        user: {
+          id: user._id,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          isProfileComplete: user.isProfileComplete,
+          approvalStatus: user.approvalStatus,
+          profile: user.profile,
+        },
+      });
+    }
 
     // ── Find latest valid OTP record ──
     const otpRecord = await OtpRecord.findOne({
