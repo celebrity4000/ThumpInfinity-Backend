@@ -5,6 +5,7 @@ import {
   getOrderById,
   cancelOrder,
   updateOrderStatus,
+  updateOrderPaymentStatus,
   getAllOrders,
 } from "../controllers/Ordercontroller";
 import { protect } from "../middlewares/authMiddleware";
@@ -21,5 +22,6 @@ router.patch("/:id/cancel", protect, cancelOrder);
 // Admin routes (Admin JWT)
 router.get("/", adminAuth, getAllOrders);
 router.patch("/:id/status", adminAuth, updateOrderStatus);
+router.patch("/:id/payment-status", adminAuth, updateOrderPaymentStatus);
 
 export default router;

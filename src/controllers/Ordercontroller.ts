@@ -220,7 +220,7 @@ export const placeOrder = async (
       deliveryTip: parsedDeliveryTip,
       totalAmount,
       paymentMethod,
-      paymentStatus: paymentMethod === "cod" ? "pending" : "paid",
+      paymentStatus: "pending",
       transactionId: transactionId || undefined,
       status: "confirmed",
       statusHistory: [
@@ -228,7 +228,7 @@ export const placeOrder = async (
         {
           status: "confirmed",
           timestamp: new Date(),
-          note: "Payment received",
+          note: "Order confirmed",
         },
       ],
     });
@@ -462,6 +462,38 @@ export const updateOrderStatus = async (
     });
 
     sendSuccess(res, "Order status updated", order);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── UPDATE ORDER PAYMENT STATUS (admin) ──────────────────────────────────────
+// PATCH /api/orders/:id/payment-status  — admin only
+export const updateOrderPaymentStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { paymentStatus } = req.body;
+
+    const validStatuses = ["pending", "paid", "failed", "refunded"];
+    if (!validStatuses.includes(paymentStatus)) {
+      sendError(res, "Invalid payment status", undefined, 400);
+      return;
+    }
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      sendError(res, "Order not found", undefined, 404);
+      return;
+    }
+
+    order.paymentStatus = paymentStatus;
+    await order.save();
+
+    sendSuccess(res, "Order payment status updated", order);
   } catch (error) {
     next(error);
   }
