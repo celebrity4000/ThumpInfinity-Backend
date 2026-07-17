@@ -787,6 +787,7 @@ export const getAllProducts = async (
       compatibility,
       search,
       color,
+      isActive,
       sortBy = "createdAt",
       order = "desc",
     } = req.query;
@@ -795,7 +796,20 @@ export const getAllProducts = async (
     const limitNum = Math.min(100, parseInt(limit as string, 10));
     const skip = (pageNum - 1) * limitNum;
 
-    const filter: Record<string, unknown> = { isActive: true };
+    const filter: Record<string, unknown> = {};
+
+    // ── Apply isActive filter ──
+    if (isActive === "all") {
+      // Do not filter by isActive (returns both active and inactive)
+    } else if (isActive === "false") {
+      filter.isActive = false;
+    } else if (isActive === "true") {
+      filter.isActive = true;
+    } else {
+      // Default behavior (customer app)
+      filter.isActive = true;
+    }
+
     if (category) filter.category = (category as string).toLowerCase();
     if (brand) filter.brand = brand as string;
     if (featured === "true") filter.isFeatured = true;
