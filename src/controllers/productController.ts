@@ -817,14 +817,21 @@ export const getAllProducts = async (
     if (color) filter.color = color as string;
     if (compatibility)
       filter.compatibility = { $in: [compatibility as string] };
-    if (search) filter.$text = { $search: search as string };
-
-    const sortObj: Record<string, 1 | -1> = {
+    const projection: Record<string, any> = {};
+    let sortObj: Record<string, any> = {
       [sortBy as string]: order === "desc" ? -1 : 1,
     };
 
+    if (search) {
+      filter.$text = { $search: search as string };
+      projection.score = { $meta: "textScore" };
+      if (sortBy === "createdAt") {
+        sortObj = { score: { $meta: "textScore" } };
+      }
+    }
+
     const [products, total] = await Promise.all([
-      Product.find(filter).sort(sortObj).skip(skip).limit(limitNum).lean(),
+      Product.find(filter, projection).sort(sortObj).skip(skip).limit(limitNum).lean(),
       Product.countDocuments(filter),
     ]);
 
