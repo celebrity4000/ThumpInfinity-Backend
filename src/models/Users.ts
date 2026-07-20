@@ -113,7 +113,9 @@ const UserSchema = new mongoose.Schema<IUser>(
     },
     phone: {
       type: String,
-      required: false,
+      required: [true, "Phone number is required"],
+      unique: true,
+      sparse: true,
       trim: true,
       match: [/^\d{10}$/, "Phone must be 10 digits"],
     },
@@ -250,7 +252,7 @@ UserSchema.methods.addFCMToken = async function (
 
 // ── Indexes ──────────────────────────────────────────────────────────────────
 UserSchema.index({ email: 1 });
-UserSchema.index({ phone: 1 });
+UserSchema.index({ phone: 1 }, { unique: true, sparse: true });
 UserSchema.index({ "profile.gstNumber": 1 }, { sparse: true });
 UserSchema.index({ "fcmTokens.token": 1 });
 UserSchema.index({ "pushTokens.token": 1 });

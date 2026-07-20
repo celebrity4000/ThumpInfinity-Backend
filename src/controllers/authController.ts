@@ -504,6 +504,12 @@ const completeProfile = async (
   res: Response,
 ): Promise<Response> => {
   try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
     const {
       contactName,
       phone,
@@ -542,6 +548,18 @@ const completeProfile = async (
       });
     }
 
+    // ── Check if phone number is already registered ──
+    const existingUserWithPhone = await User.findOne({
+      phone: phone!.trim(),
+      _id: { $ne: req.user._id },
+    });
+    if (existingUserWithPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "This phone number is already registered with another account.",
+      });
+    }
+
     // ── Validate pincode ──
     if (!/^\d{6}$/.test(pincode!.trim())) {
       return res.status(400).json({
@@ -564,12 +582,6 @@ const completeProfile = async (
 
     // ── Update user ──
     // req.user is set by the protect middleware
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated",
-      });
-    }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
