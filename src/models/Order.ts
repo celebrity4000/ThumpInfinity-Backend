@@ -48,8 +48,23 @@ export type OrderStatus =
   | "completed"
   | "cancelled";
 
-export type PaymentMethod = "upi" | "cod" | "card" | "netbanking";
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentMethod =
+  | "cheque"
+  | "upi"
+  | "bank_transfer"
+  | "cod"
+  | "card"
+  | "netbanking";
+
+export type PaymentStatus =
+  | "pending"
+  | "proof_submitted"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "rejected";
+
+export type PaymentProofStatus = "none" | "submitted" | "verified" | "rejected";
 
 export interface IOrder extends Document {
   orderNumber: string;
@@ -71,6 +86,13 @@ export interface IOrder extends Document {
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   transactionId?: string;
+  chequeNumber?: string;
+  bankName?: string;
+  paymentProofUrl?: string;
+  paymentProofStatus: PaymentProofStatus;
+  paymentProofVerifiedAt?: Date;
+  paymentProofVerifiedBy?: mongoose.Types.ObjectId;
+  paymentProofRejectionReason?: string;
 
   // Status
   status: OrderStatus;
@@ -209,15 +231,33 @@ const OrderSchema = new Schema<IOrder>(
     // ── Payment ──
     paymentMethod: {
       type: String,
-      enum: ["upi", "cod", "card", "netbanking"],
+      enum: ["cheque", "upi", "bank_transfer", "cod", "card", "netbanking"],
       default: "upi",
     },
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed", "refunded"],
+      enum: [
+        "pending",
+        "proof_submitted",
+        "paid",
+        "failed",
+        "refunded",
+        "rejected",
+      ],
       default: "pending",
     },
     transactionId: { type: String, trim: true },
+    chequeNumber: { type: String, trim: true },
+    bankName: { type: String, trim: true },
+    paymentProofUrl: { type: String, trim: true },
+    paymentProofStatus: {
+      type: String,
+      enum: ["none", "submitted", "verified", "rejected"],
+      default: "none",
+    },
+    paymentProofVerifiedAt: { type: Date },
+    paymentProofVerifiedBy: { type: Schema.Types.ObjectId, ref: "Admin" },
+    paymentProofRejectionReason: { type: String, trim: true },
 
     // ✅ Added "completed" to status enum
     status: {

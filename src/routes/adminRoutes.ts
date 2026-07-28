@@ -16,6 +16,7 @@ import {
   uploadQRCode,
   getQRCode,
   deleteQRCode,
+  updateBankDetails,
 } from "../controllers/Admincontroller";
 import { adminAuth } from "../middlewares/adminAuth";
 import { uploadSingleImage } from "../middlewares/upload";
@@ -31,10 +32,11 @@ router.get("/profile", adminAuth, getAdminProfile);
 router.patch("/email", adminAuth, changeEmail);
 router.patch("/password", adminAuth, changePassword);
 
-// ── QR Code Management ────────────────────────────────────────────────────────
+// ── QR Code & Bank Details Management ─────────────────────────────────────────
 router.post("/qr-code", adminAuth, uploadSingleImage, uploadQRCode);
 router.get("/qr-code", getQRCode);  
 router.delete("/qr-code", adminAuth, deleteQRCode);
+router.patch("/bank-details", adminAuth, updateBankDetails);
 
 // ── Customer Management ───────────────────────────────────────────────────────
 router.get("/customers", adminAuth, getCustomers);

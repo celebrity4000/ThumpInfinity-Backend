@@ -113,7 +113,7 @@ const UserSchema = new mongoose.Schema<IUser>(
     },
     phone: {
       type: String,
-      required: [true, "Phone number is required"],
+      required: false,
       unique: true,
       sparse: true,
       trim: true,

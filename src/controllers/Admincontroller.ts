@@ -625,7 +625,7 @@ export const uploadQRCode = async (
   }
 };
 
-// ─── GET QR CODE ──────────────────────────────────────────────────────────
+// ─── GET PAYMENT & BANK SETTINGS ──────────────────────────────────────────
 export const getQRCode = async (
   req: Request,
   res: Response,
@@ -634,9 +634,59 @@ export const getQRCode = async (
   try {
     const settings = await (AdminSettings as any).getSettings();
 
-    sendSuccess(res, "QR code fetched successfully", {
+    sendSuccess(res, "Payment settings fetched successfully", {
       qrCodeUrl: settings.qrCodeUrl,
       upiId: settings.upiId,
+      bankName: settings.bankName,
+      accountName: settings.accountName,
+      accountNumber: settings.accountNumber,
+      ifscCode: settings.ifscCode,
+      branchName: settings.branchName,
+      chequePayableTo: settings.chequePayableTo,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── UPDATE BANK DETAILS ──────────────────────────────────────────────────
+export const updateBankDetails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const {
+      bankName,
+      accountName,
+      accountNumber,
+      ifscCode,
+      branchName,
+      chequePayableTo,
+      upiId,
+    } = req.body;
+
+    const settings = await (AdminSettings as any).getSettings();
+
+    if (bankName !== undefined) settings.bankName = bankName;
+    if (accountName !== undefined) settings.accountName = accountName;
+    if (accountNumber !== undefined) settings.accountNumber = accountNumber;
+    if (ifscCode !== undefined) settings.ifscCode = ifscCode;
+    if (branchName !== undefined) settings.branchName = branchName;
+    if (chequePayableTo !== undefined) settings.chequePayableTo = chequePayableTo;
+    if (upiId !== undefined) settings.upiId = upiId;
+
+    await settings.save();
+
+    sendSuccess(res, "Bank & payment details updated successfully", {
+      qrCodeUrl: settings.qrCodeUrl,
+      upiId: settings.upiId,
+      bankName: settings.bankName,
+      accountName: settings.accountName,
+      accountNumber: settings.accountNumber,
+      ifscCode: settings.ifscCode,
+      branchName: settings.branchName,
+      chequePayableTo: settings.chequePayableTo,
     });
   } catch (error) {
     next(error);
@@ -666,7 +716,6 @@ export const deleteQRCode = async (
     }
 
     settings.qrCodeUrl = "";
-    settings.upiId = "";
     await settings.save();
 
     sendSuccess(res, "QR code deleted successfully");

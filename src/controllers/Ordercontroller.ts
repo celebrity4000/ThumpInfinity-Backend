@@ -3,6 +3,7 @@ import Order, { OrderStatus } from "../models/Order";
 import Product from "../models/Product";
 import { sendSuccess, sendError } from "../utils/response";
 import { sendPushNotification } from "../utils/pushNotification";
+import { sendNewOrderAdminEmail } from "../utils/email";
 
 // In your order controller, update the validation section:
 const enrichAndValidateItems = async (
@@ -127,6 +128,9 @@ export const placeOrder = async (
       deliveryTip = 0,
       paymentMethod = "upi",
       transactionId,
+      chequeNumber,
+      bankName,
+      paymentProofUrl,
     } = req.body;
 
     // ── Basic validation ──
@@ -153,6 +157,22 @@ export const placeOrder = async (
       sendError(
         res,
         "Delivery address must include: contactName, addressLine1, city, state, pincode, phone",
+      );
+      return;
+    }
+
+    // ── Cash on Delivery (COD) Delhi-Only Validation ──
+    const isDelhiAddress =
+      state.trim().toLowerCase().includes("delhi") ||
+      city.trim().toLowerCase().includes("delhi") ||
+      pincode.trim().startsWith("11");
+
+    if (paymentMethod === "cod" && !isDelhiAddress) {
+      sendError(
+        res,
+        "Cash on Delivery (COD) is available ONLY for customers located in Delhi. Please select an online/manual payment option.",
+        undefined,
+        400,
       );
       return;
     }
@@ -198,6 +218,19 @@ export const placeOrder = async (
       return;
     }
 
+    // ── Determine Payment Proof Status ──
+    const hasProof = Boolean(paymentProofUrl);
+    const initialPaymentStatus = paymentMethod === "cod" 
+      ? "pending" 
+      : hasProof 
+      ? "proof_submitted" 
+      : "pending";
+    const initialProofStatus = paymentMethod === "cod"
+      ? "none"
+      : hasProof
+      ? "submitted"
+      : "none";
+
     // ── Create order ──
     const order = new Order({
       customer: customerId,
@@ -220,15 +253,21 @@ export const placeOrder = async (
       deliveryTip: parsedDeliveryTip,
       totalAmount,
       paymentMethod,
-      paymentStatus: "pending",
+      paymentStatus: initialPaymentStatus,
       transactionId: transactionId || undefined,
+      chequeNumber: chequeNumber || undefined,
+      bankName: bankName || undefined,
+      paymentProofUrl: paymentProofUrl || undefined,
+      paymentProofStatus: initialProofStatus,
       status: "confirmed",
       statusHistory: [
         { status: "pending", timestamp: new Date(), note: "Order placed" },
         {
           status: "confirmed",
           timestamp: new Date(),
-          note: "Order confirmed",
+          note: hasProof
+            ? `Order confirmed. Payment proof submitted (${paymentMethod.toUpperCase()})`
+            : "Order confirmed",
         },
       ],
     });
@@ -243,6 +282,48 @@ export const placeOrder = async (
         }),
       ),
     );
+
+    // ── Send Admin Email Notification ──
+    try {
+      sendNewOrderAdminEmail({
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        customerName: contactName,
+        phone,
+        deliveryAddress: {
+          contactName,
+          addressLine1,
+          addressLine2: deliveryAddress.addressLine2,
+          city,
+          state,
+          pincode,
+          phone,
+        },
+        items: enriched.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          sellingPrice: i.sellingPrice,
+          lineTotal: i.lineTotal,
+          brand: i.brand,
+          type: i.type,
+          color: i.color,
+        })),
+        subtotal,
+        couponDiscount: parsedCouponDiscount,
+        totalAmount,
+        paymentMethod,
+        paymentStatus: initialPaymentStatus,
+        transactionId: transactionId || undefined,
+        chequeNumber: chequeNumber || undefined,
+        bankName: bankName || undefined,
+        paymentProofUrl: paymentProofUrl || undefined,
+        createdAt: order.createdAt,
+      }).catch((emailErr) =>
+        console.error("Admin Email notification error:", emailErr),
+      );
+    } catch (e) {
+      console.error("Failed to queue admin order email:", e);
+    }
 
     // Populate for response
     const populated = await Order.findById(order._id).populate(
@@ -493,6 +574,32 @@ export const updateOrderPaymentStatus = async (
     order.paymentStatus = paymentStatus;
     await order.save();
 
+    // ── Push notification to customer on payment status change ──
+    try {
+      let title = "Payment Status Updated 💳";
+      let body = `Payment status for Order ${order.orderNumber} has been updated to ${paymentStatus.toUpperCase()}.`;
+
+      if (paymentStatus === "paid") {
+        title = "Payment Confirmed! 🎉";
+        body = `Your payment of ₹${order.totalAmount} for Order ${order.orderNumber} has been verified and marked as PAID.`;
+      } else if (paymentStatus === "failed") {
+        title = "Payment Failed ❌";
+        body = `Payment for Order ${order.orderNumber} failed. Please contact support or retry.`;
+      } else if (paymentStatus === "refunded") {
+        title = "Refund Processed 💰";
+        body = `Refund of ₹${order.totalAmount} for Order ${order.orderNumber} has been processed.`;
+      }
+
+      await sendPushNotification(order.customer.toString(), title, body, {
+        type: "order_status_update",
+        orderId: order._id.toString(),
+        status: paymentStatus,
+        screen: "/(tabs)/myorders",
+      });
+    } catch (pushErr) {
+      console.error("Failed to send push notification on payment status update:", pushErr);
+    }
+
     sendSuccess(res, "Order payment status updated", order);
   } catch (error) {
     next(error);
@@ -561,6 +668,156 @@ export const getAllOrders = async (
         totalPages: Math.ceil(total / limitNum),
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── SUBMIT PAYMENT PROOF (Customer) ──────────────────────────────────────────
+// PATCH /api/orders/:id/payment-proof
+export const submitPaymentProof = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const customerId = (req as any).user?._id;
+    const { id } = req.params;
+    const { paymentProofUrl, transactionId, chequeNumber, bankName } = req.body;
+
+    if (!customerId) {
+      sendError(res, "Unauthorized", undefined, 401);
+      return;
+    }
+
+    if (!paymentProofUrl) {
+      sendError(res, "Payment proof image URL is required", undefined, 400);
+      return;
+    }
+
+    const order = await Order.findOne({ _id: id, customer: customerId });
+    if (!order) {
+      sendError(res, "Order not found", undefined, 404);
+      return;
+    }
+
+    order.paymentProofUrl = paymentProofUrl;
+    if (transactionId) order.transactionId = transactionId;
+    if (chequeNumber) order.chequeNumber = chequeNumber;
+    if (bankName) order.bankName = bankName;
+
+    order.paymentProofStatus = "submitted";
+    order.paymentStatus = "proof_submitted";
+    order.paymentProofRejectionReason = undefined;
+
+    order.statusHistory.push({
+      status: order.status,
+      timestamp: new Date(),
+      note: `Payment proof uploaded (${order.paymentMethod.toUpperCase()})`,
+    });
+
+    await order.save();
+
+    sendSuccess(res, "Payment proof submitted successfully for verification", order);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── VERIFY PAYMENT PROOF (Admin) ──────────────────────────────────────────────
+// PATCH /api/orders/:id/verify-proof
+export const verifyPaymentProof = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { action, rejectionReason } = req.body as {
+      action: "approve" | "reject";
+      rejectionReason?: string;
+    };
+
+    if (!action || !["approve", "reject"].includes(action)) {
+      sendError(res, "Action must be 'approve' or 'reject'", undefined, 400);
+      return;
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      sendError(res, "Order not found", undefined, 404);
+      return;
+    }
+
+    const adminId = (req as any).adminId;
+
+    if (action === "approve") {
+      order.paymentProofStatus = "verified";
+      order.paymentStatus = "paid";
+      order.paymentProofVerifiedAt = new Date();
+      if (adminId) order.paymentProofVerifiedBy = adminId;
+
+      if (order.status === "pending") {
+        order.status = "confirmed";
+      }
+
+      order.statusHistory.push({
+        status: order.status,
+        timestamp: new Date(),
+        note: "Payment proof verified and approved by admin",
+      });
+
+      await order.save();
+
+      // Push notification to customer
+      try {
+        await sendPushNotification(
+          order.customer.toString(),
+          "Payment Verified! 🎉",
+          `Your payment proof for Order ${order.orderNumber} has been verified & approved.`,
+          {
+            type: "payment_verified",
+            orderId: order._id.toString(),
+            screen: "/(tabs)/myorders",
+          },
+        );
+      } catch (err) {
+        console.error("Failed to send push notification:", err);
+      }
+
+      sendSuccess(res, "Payment proof approved successfully", order);
+    } else {
+      order.paymentProofStatus = "rejected";
+      order.paymentStatus = "rejected";
+      order.paymentProofRejectionReason =
+        rejectionReason || "Invalid payment proof provided";
+
+      order.statusHistory.push({
+        status: order.status,
+        timestamp: new Date(),
+        note: `Payment proof rejected: ${order.paymentProofRejectionReason}`,
+      });
+
+      await order.save();
+
+      // Push notification to customer
+      try {
+        await sendPushNotification(
+          order.customer.toString(),
+          "Payment Proof Rejected ⚠️",
+          `Your payment proof for Order ${order.orderNumber} was rejected: ${order.paymentProofRejectionReason}. Please re-upload proof.`,
+          {
+            type: "payment_rejected",
+            orderId: order._id.toString(),
+            screen: "/(tabs)/myorders",
+          },
+        );
+      } catch (err) {
+        console.error("Failed to send push notification:", err);
+      }
+
+      sendSuccess(res, "Payment proof rejected", order);
+    }
   } catch (error) {
     next(error);
   }
