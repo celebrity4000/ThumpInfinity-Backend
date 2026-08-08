@@ -9,6 +9,7 @@ import {
   getAllOrders,
   submitPaymentProof,
   verifyPaymentProof,
+  getPaymentHistory,
 } from "../controllers/Ordercontroller";
 import { protect } from "../middlewares/authMiddleware";
 import { adminAuth } from "../middlewares/adminAuth";
@@ -18,6 +19,7 @@ const router = Router();
 // Customer routes (User JWT)
 router.post("/", protect, placeOrder);
 router.get("/my", protect, getMyOrders);
+router.get("/payments/history", protect, getPaymentHistory);
 router.get("/:id", protect, getOrderById);
 router.patch("/:id/cancel", protect, cancelOrder);
 router.patch("/:id/payment-proof", protect, submitPaymentProof);

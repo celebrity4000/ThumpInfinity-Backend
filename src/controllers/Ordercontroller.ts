@@ -161,7 +161,7 @@ export const placeOrder = async (
       return;
     }
 
-    // ── Cash on Delivery (COD) Delhi-Only Validation ──
+    /* ── Cash on Delivery (COD) Delhi-Only Validation (Commented / On Hold)
     const isDelhiAddress =
       state.trim().toLowerCase().includes("delhi") ||
       city.trim().toLowerCase().includes("delhi") ||
@@ -176,6 +176,7 @@ export const placeOrder = async (
       );
       return;
     }
+    ── */
 
     // ── Enrich items from DB (validate stock, prices) ──
     const { enriched, errors } = await enrichAndValidateItems(items);
@@ -818,6 +819,61 @@ export const verifyPaymentProof = async (
 
       sendSuccess(res, "Payment proof rejected", order);
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── GET CUSTOMER PAYMENT HISTORY ─────────────────────────────────────────────
+// GET /api/orders/payments/history  — protected (customer)
+export const getPaymentHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const customerId = (req as any).user._id;
+
+    // Fetch all orders placed by this customer sorted by latest
+    const orders = await Order.find({ customer: customerId })
+      .sort({ createdAt: -1 })
+      .select(
+        "orderNumber items totalAmount subtotal couponDiscount deliveryCharge platformFee gst paymentMethod paymentStatus transactionId chequeNumber bankName paymentProofUrl paymentProofStatus paymentProofVerifiedAt paymentProofRejectionReason status placedAt createdAt",
+      )
+      .lean();
+
+    // Summary calculation
+    let totalPaid = 0;
+    let pendingVerification = 0;
+    let refundedAmount = 0;
+
+    orders.forEach((o) => {
+      if (o.paymentStatus === "paid") {
+        totalPaid += o.totalAmount;
+      } else if (
+        o.paymentStatus === "pending" ||
+        o.paymentStatus === "proof_submitted"
+      ) {
+        pendingVerification += o.totalAmount;
+      } else if (o.paymentStatus === "refunded") {
+        refundedAmount += o.totalAmount;
+      }
+    });
+
+    sendSuccess(
+      res,
+      "Payment history fetched successfully",
+      {
+        summary: {
+          totalPaid,
+          pendingVerification,
+          refundedAmount,
+          totalTransactions: orders.length,
+        },
+        records: orders,
+      },
+      200,
+    );
   } catch (error) {
     next(error);
   }
