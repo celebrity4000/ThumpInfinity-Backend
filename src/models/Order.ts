@@ -82,6 +82,10 @@ export interface IOrder extends Document {
   deliveryTip: number;
   totalAmount: number;
 
+  // Credit / Wallet Split
+  creditAmountApplied?: number;
+  remainingAmountPayable?: number;
+
   // Payment
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
@@ -227,6 +231,10 @@ const OrderSchema = new Schema<IOrder>(
     gst: { type: Number, default: 0, min: 0 },
     deliveryTip: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, required: true, min: 0 },
+
+    // ── Credit / Wallet Split ──
+    creditAmountApplied: { type: Number, default: 0, min: 0 },
+    remainingAmountPayable: { type: Number, default: 0, min: 0 },
 
     // ── Payment ──
     paymentMethod: {

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import Order, { OrderStatus } from "../models/Order";
 import Product from "../models/Product";
+import User from "../models/Users";
 import { sendSuccess, sendError } from "../utils/response";
 import { sendPushNotification } from "../utils/pushNotification";
 import { sendNewOrderAdminEmail } from "../utils/email";
@@ -161,7 +162,7 @@ export const placeOrder = async (
       return;
     }
 
-    /* ── Cash on Delivery (COD) Delhi-Only Validation (Commented / On Hold)
+    // ── Cash on Delivery (COD) Delhi-Only Validation ──
     const isDelhiAddress =
       state.trim().toLowerCase().includes("delhi") ||
       city.trim().toLowerCase().includes("delhi") ||
@@ -176,7 +177,6 @@ export const placeOrder = async (
       );
       return;
     }
-    ── */
 
     // ── Enrich items from DB (validate stock, prices) ──
     const { enriched, errors } = await enrichAndValidateItems(items);
@@ -219,14 +219,43 @@ export const placeOrder = async (
       return;
     }
 
+    // ── Handle Credit / Wallet Balance Application ──
+    const { useCreditBalance, creditAmountToApply } = req.body;
+    let appliedCredit = 0;
+    let remainingPayable = totalAmount;
+
+    if (useCreditBalance) {
+      const user = await User.findById(customerId);
+      if (user && (user.creditBalance || 0) > 0) {
+        const requestedCredit = Number(creditAmountToApply) || totalAmount;
+        appliedCredit = Math.min(
+          user.creditBalance || 0,
+          Math.min(totalAmount, Math.max(0, requestedCredit)),
+        );
+        remainingPayable = totalAmount - appliedCredit;
+
+        // Deduct applied credit from user balance
+        user.creditBalance = Math.max(0, (user.creditBalance || 0) - appliedCredit);
+        user.creditTransactions.push({
+          amount: appliedCredit,
+          type: "debit",
+          description: `Applied towards Order payment`,
+          createdAt: new Date(),
+        });
+        await user.save();
+      }
+    }
+
     // ── Determine Payment Proof Status ──
     const hasProof = Boolean(paymentProofUrl);
-    const initialPaymentStatus = paymentMethod === "cod" 
+    const initialPaymentStatus = remainingPayable === 0
+      ? "paid"
+      : paymentMethod === "cod" 
       ? "pending" 
       : hasProof 
       ? "proof_submitted" 
       : "pending";
-    const initialProofStatus = paymentMethod === "cod"
+    const initialProofStatus = paymentMethod === "cod" || remainingPayable === 0
       ? "none"
       : hasProof
       ? "submitted"
@@ -253,6 +282,8 @@ export const placeOrder = async (
       gst: parsedGst,
       deliveryTip: parsedDeliveryTip,
       totalAmount,
+      creditAmountApplied: appliedCredit,
+      remainingAmountPayable: remainingPayable,
       paymentMethod,
       paymentStatus: initialPaymentStatus,
       transactionId: transactionId || undefined,

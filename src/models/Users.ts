@@ -28,6 +28,14 @@ interface IPushToken {
   createdAt?: Date;
 }
 
+interface ICreditTransaction {
+  amount: number;
+  type: "credit" | "debit";
+  description: string;
+  orderId?: string;
+  createdAt: Date;
+}
+
 interface IUser extends Document {
   // Auth
   email: string;
@@ -41,6 +49,10 @@ interface IUser extends Document {
 
   // Profile (filled at signup step 3)
   profile: IProfile;
+
+  // Credit Balance & Transactions
+  creditBalance: number;
+  creditTransactions: ICreditTransaction[];
 
   // Push tokens (legacy - for backward compatibility)
   pushTokens?: IPushToken[];
@@ -199,6 +211,22 @@ const UserSchema = new mongoose.Schema<IUser>(
       type: Boolean,
       default: true,
     },
+
+    // ── Credit Balance & Transactions ─────────────────
+    creditBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    creditTransactions: [
+      {
+        amount: { type: Number, required: true },
+        type: { type: String, enum: ["credit", "debit"], required: true },
+        description: { type: String, default: "" },
+        orderId: { type: String },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true, // createdAt, updatedAt

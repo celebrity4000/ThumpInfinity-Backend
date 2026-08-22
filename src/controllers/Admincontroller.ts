@@ -723,3 +723,72 @@ export const deleteQRCode = async (
     next(error);
   }
 };
+
+// ─── MANAGE CUSTOMER CREDIT BALANCE ─────────────────────────────────────────────
+export const manageCustomerCredit = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { amount, type, note } = req.body; // type: 'credit' | 'debit'
+
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      sendError(res, "Please provide a valid positive amount", undefined, 400);
+      return;
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      sendError(res, "Customer not found", undefined, 404);
+      return;
+    }
+
+    if (type === "debit" && (user.creditBalance || 0) < numAmount) {
+      sendError(
+        res,
+        `Cannot debit ₹${numAmount}. Available credit balance is ₹${user.creditBalance || 0}`,
+        undefined,
+        400,
+      );
+      return;
+    }
+
+    if (type === "credit") {
+      user.creditBalance = (user.creditBalance || 0) + numAmount;
+    } else {
+      user.creditBalance = Math.max(0, (user.creditBalance || 0) - numAmount);
+    }
+
+    user.creditTransactions.push({
+      amount: numAmount,
+      type: type === "credit" ? "credit" : "debit",
+      description: note || (type === "credit" ? "Credit added by admin" : "Credit debited by admin"),
+      createdAt: new Date(),
+    });
+
+    await user.save();
+
+    // Notify customer via FCM Push Notification
+    const title = type === "credit" ? "💳 Credit Added! 🎉" : "💳 Credit Updated";
+    const body = type === "credit"
+      ? `Admin added ₹${numAmount} credit to your account! Available Credit: ₹${user.creditBalance}.`
+      : `₹${numAmount} was deducted from your credit balance. Remaining Credit: ₹${user.creditBalance}.`;
+
+    sendPushNotification(user._id.toString(), title, body, {
+      type: "credit_update",
+      creditBalance: String(user.creditBalance),
+      screen: "/(tabs)/account",
+    }).catch((err) => console.error("Credit push notification failed:", err));
+
+    sendSuccess(res, "Customer credit updated successfully", {
+      _id: user._id,
+      creditBalance: user.creditBalance,
+      creditTransactions: user.creditTransactions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

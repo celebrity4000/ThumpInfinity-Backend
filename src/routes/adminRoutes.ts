@@ -11,6 +11,7 @@ import {
   activateCustomer,
   deactivateCustomer,
   deleteCustomer,
+  manageCustomerCredit,
   sendManualPush,
   testFCMNotification,
   uploadQRCode,
@@ -46,6 +47,7 @@ router.patch("/customers/:id/reject", adminAuth, rejectCustomer);
 router.patch("/customers/:id/activate", adminAuth, activateCustomer);
 router.patch("/customers/:id/deactivate", adminAuth, deactivateCustomer);
 router.delete("/customers/:id", adminAuth, deleteCustomer);
+router.post("/customers/:id/credit", adminAuth, manageCustomerCredit);
 
 // ── Push Notification Routes ──────────────────────────────────────────────────
 router.post("/send-push", adminAuth, sendManualPush);
