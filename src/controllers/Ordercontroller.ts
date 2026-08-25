@@ -5,6 +5,8 @@ import User from "../models/Users";
 import { sendSuccess, sendError } from "../utils/response";
 import { sendPushNotification } from "../utils/pushNotification";
 import { sendNewOrderAdminEmail } from "../utils/email";
+import { calculateGSTByState } from "../utils/taxUtils";
+import { uploadBase64ToCloudinary } from "../utils/cloudinary";
 
 // In your order controller, update the validation section:
 const enrichAndValidateItems = async (
@@ -190,13 +192,13 @@ export const placeOrder = async (
       return;
     }
 
-    // ── Compute totals server-side (don't trust client) ──
+    // ── Calculate state-based GST breakdown (CGST, SGST, IGST) ──
     const subtotal = enriched.reduce((sum, i) => sum + i.lineTotal, 0);
-
+    const taxCalc = calculateGSTByState(subtotal, state);
     const parsedCouponDiscount = Math.max(0, Number(couponDiscount) || 0);
     const parsedDeliveryCharge = Math.max(0, Number(deliveryCharge) || 0);
     const parsedPlatformFee = Math.max(0, Number(platformFee) || 0);
-    const parsedGst = Math.max(0, Number(gst) || 0);
+    const parsedGst = taxCalc.gst;
     const parsedDeliveryTip = Math.max(0, Number(deliveryTip) || 0);
 
     const totalAmount =
@@ -246,8 +248,19 @@ export const placeOrder = async (
       }
     }
 
+    // ── Handle Payment Proof Cloudinary Upload if Base64 ──
+    let finalPaymentProofUrl = paymentProofUrl;
+    if (finalPaymentProofUrl && typeof finalPaymentProofUrl === "string" && finalPaymentProofUrl.startsWith("data:image/")) {
+      try {
+        const cloudRes = await uploadBase64ToCloudinary(finalPaymentProofUrl, "payment_proofs");
+        finalPaymentProofUrl = cloudRes.secure_url;
+      } catch (cloudErr) {
+        console.error("Cloudinary upload error for payment proof:", cloudErr);
+      }
+    }
+
     // ── Determine Payment Proof Status ──
-    const hasProof = Boolean(paymentProofUrl);
+    const hasProof = Boolean(finalPaymentProofUrl);
     const initialPaymentStatus = remainingPayable === 0
       ? "paid"
       : paymentMethod === "cod" 
@@ -260,6 +273,11 @@ export const placeOrder = async (
       : hasProof
       ? "submitted"
       : "none";
+
+    const isAutoApproved = paymentMethod === "cod" || remainingPayable === 0;
+    const initialDeliveryOtp = isAutoApproved
+      ? Math.floor(1000 + Math.random() * 9000).toString()
+      : undefined;
 
     // ── Create order ──
     const order = new Order({
@@ -279,7 +297,12 @@ export const placeOrder = async (
       couponDiscount: parsedCouponDiscount,
       deliveryCharge: parsedDeliveryCharge,
       platformFee: parsedPlatformFee,
-      gst: parsedGst,
+      cgst: taxCalc.cgst,
+      sgst: taxCalc.sgst,
+      igst: taxCalc.igst,
+      gst: taxCalc.gst,
+      gstRate: taxCalc.gstRate,
+      taxType: taxCalc.taxType,
       deliveryTip: parsedDeliveryTip,
       totalAmount,
       creditAmountApplied: appliedCredit,
@@ -289,8 +312,9 @@ export const placeOrder = async (
       transactionId: transactionId || undefined,
       chequeNumber: chequeNumber || undefined,
       bankName: bankName || undefined,
-      paymentProofUrl: paymentProofUrl || undefined,
+      paymentProofUrl: finalPaymentProofUrl || undefined,
       paymentProofStatus: initialProofStatus,
+      deliveryOtp: initialDeliveryOtp,
       status: "confirmed",
       statusHistory: [
         { status: "pending", timestamp: new Date(), note: "Order placed" },
@@ -369,6 +393,19 @@ export const placeOrder = async (
   }
 };
 
+const ensureOrderDeliveryOtp = async (o: any) => {
+  if (!o) return o;
+  const isApprovedPayment = o.paymentMethod === "cod" || o.paymentStatus === "paid";
+  const isActiveStatus = ["confirmed", "processing", "out_for_delivery", "delivered", "completed"].includes(o.status);
+
+  if (isApprovedPayment && isActiveStatus && !o.deliveryOtp) {
+    const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    o.deliveryOtp = generatedOtp;
+    await Order.updateOne({ _id: o._id }, { $set: { deliveryOtp: generatedOtp } });
+  }
+  return o;
+};
+
 // ─── GET MY ORDERS (customer) ─────────────────────────────────────────────────
 // GET /api/orders/my
 export const getMyOrders = async (
@@ -399,6 +436,8 @@ export const getMyOrders = async (
         .lean(),
       Order.countDocuments(filter),
     ]);
+
+    await Promise.all(orders.map((o) => ensureOrderDeliveryOtp(o)));
 
     sendSuccess(res, "Orders fetched successfully", {
       orders,
@@ -535,6 +574,12 @@ export const updateOrderStatus = async (
       note: note || `Status updated to ${status}`,
     });
 
+    // Generate Delivery OTP only if payment is approved (or COD)
+    const isApprovedPayment = order.paymentMethod === "cod" || order.paymentStatus === "paid";
+    if (isApprovedPayment && !order.deliveryOtp && (status === "confirmed" || status === "processing" || status === "out_for_delivery")) {
+      order.deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
     await order.save();
 
     // ✅ Send push notification to customer
@@ -546,7 +591,10 @@ export const updateOrderStatus = async (
       cancelled: "Cancelled ❌",
     };
 
-    const title = "Order Status Updated";
+    let title = "Order Status Updated";
+    if (status === "confirmed") {
+      title = "Order Confirmed! 🚚";
+    }
 
     // Get product names from order items
     const productNames = order.items.map((item) => item.name);
@@ -560,15 +608,20 @@ export const updateOrderStatus = async (
       productNamesText = `${productNames[0]} and ${productNames.length - 1} more item(s)`;
     }
 
-    const body =
+    let body =
       productNames.length > 0
         ? `Your order containing ${productNamesText} is now ${statusLabels[status] || status}.`
         : `Your order is now ${statusLabels[status] || status}.`;
+
+    if ((status === "confirmed" || status === "processing" || status === "out_for_delivery") && order.deliveryOtp) {
+      body += ` Delivery OTP: ${order.deliveryOtp}. Share this OTP with the delivery agent.`;
+    }
 
     await sendPushNotification(order.customer.toString(), title, body, {
       type: "order_status_update",
       orderId: order._id.toString(),
       orderNumber: order.orderNumber,
+      deliveryOtp: order.deliveryOtp,
       status: status,
       previousStatus: previousStatus,
       screen: "/(tabs)/myorders",
@@ -604,12 +657,22 @@ export const updateOrderPaymentStatus = async (
     }
 
     order.paymentStatus = paymentStatus;
+
+    if (paymentStatus === "paid" && !order.deliveryOtp) {
+      order.deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
     await order.save();
 
     // ── Push notification to customer on payment status change ──
     try {
       let title = "Payment Status Updated 💳";
-      let body = `Payment status for Order ${order.orderNumber} has been updated to ${paymentStatus.toUpperCase()}.`;
+      let body = `Payment status for Order #${order.orderNumber} has been updated to ${paymentStatus.toUpperCase()}.`;
+
+      if (paymentStatus === "paid" && order.deliveryOtp) {
+        title = "Payment Approved & Order Confirmed! 🚚";
+        body += ` Your Delivery OTP is ${order.deliveryOtp}. Share this OTP with the delivery agent.`;
+      }
 
       if (paymentStatus === "paid") {
         title = "Payment Confirmed! 🎉";
@@ -691,6 +754,8 @@ export const getAllOrders = async (
       Order.countDocuments(filter),
     ]);
 
+    await Promise.all(orders.map((o) => ensureOrderDeliveryOtp(o)));
+
     sendSuccess(res, "Orders fetched successfully", {
       orders,
       pagination: {
@@ -733,7 +798,17 @@ export const submitPaymentProof = async (
       return;
     }
 
-    order.paymentProofUrl = paymentProofUrl;
+    let finalProofUrl = paymentProofUrl;
+    if (finalProofUrl && typeof finalProofUrl === "string" && finalProofUrl.startsWith("data:image/")) {
+      try {
+        const cloudRes = await uploadBase64ToCloudinary(finalProofUrl, "payment_proofs");
+        finalProofUrl = cloudRes.secure_url;
+      } catch (cloudErr) {
+        console.error("Cloudinary upload error for payment proof:", cloudErr);
+      }
+    }
+
+    order.paymentProofUrl = finalProofUrl;
     if (transactionId) order.transactionId = transactionId;
     if (chequeNumber) order.chequeNumber = chequeNumber;
     if (bankName) order.bankName = bankName;
@@ -793,23 +868,30 @@ export const verifyPaymentProof = async (
         order.status = "confirmed";
       }
 
+      // Generate Delivery OTP on payment approval
+      if (!order.deliveryOtp) {
+        order.deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      }
+
       order.statusHistory.push({
         status: order.status,
         timestamp: new Date(),
-        note: "Payment proof verified and approved by admin",
+        note: `Payment proof verified & approved by admin. Delivery OTP: ${order.deliveryOtp}`,
       });
 
       await order.save();
 
-      // Push notification to customer
+      // Push notification to customer with Delivery OTP
       try {
         await sendPushNotification(
           order.customer.toString(),
-          "Payment Verified! 🎉",
-          `Your payment proof for Order ${order.orderNumber} has been verified & approved.`,
+          "Payment Verified & Confirmed! 🚚",
+          `Your payment proof for Order #${order.orderNumber} has been verified & approved. Your Delivery OTP is ${order.deliveryOtp}. Share this OTP with the delivery agent.`,
           {
             type: "payment_verified",
             orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            deliveryOtp: order.deliveryOtp,
             screen: "/(tabs)/myorders",
           },
         );
@@ -907,5 +989,33 @@ export const getPaymentHistory = async (
     );
   } catch (error) {
     next(error);
+  }
+};
+
+/**
+ * POST /api/orders/calculate-tax
+ * Calculates state-based GST breakdown (CGST, SGST, IGST)
+ */
+export const calculateTax = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { subtotal = 0, state = "Delhi", sellerState = "Delhi", totalGstPercent = 18 } = req.body;
+    const numericSubtotal = Math.max(0, Number(subtotal) || 0);
+
+    const taxCalc = calculateGSTByState(
+      numericSubtotal,
+      String(state || "Delhi"),
+      String(sellerState || "Delhi"),
+      Number(totalGstPercent) || 18,
+    );
+
+    sendSuccess(res, "Tax calculated successfully", {
+      subtotal: numericSubtotal,
+      ...taxCalc,
+    });
+  } catch (err: any) {
+    sendError(res, err.message || "Tax calculation error", err);
   }
 };

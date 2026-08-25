@@ -35,3 +35,17 @@ export const uploadToCloudinary = (
     streamifier.createReadStream(buffer).pipe(uploadStream);
   });
 };
+
+export const uploadBase64ToCloudinary = async (
+  base64String: string,
+  folder: string = "payment_proofs",
+): Promise<{ secure_url: string; public_id: string }> => {
+  const result = await cloudinary.uploader.upload(base64String, {
+    folder,
+    resource_type: "image",
+  });
+  return {
+    secure_url: result.secure_url,
+    public_id: result.public_id,
+  };
+};

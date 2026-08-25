@@ -78,7 +78,12 @@ export interface IOrder extends Document {
   couponDiscount: number;
   deliveryCharge: number;
   platformFee: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
   gst: number;
+  gstRate: number;
+  taxType: string;
   deliveryTip: number;
   totalAmount: number;
 
@@ -101,6 +106,7 @@ export interface IOrder extends Document {
   // Status
   status: OrderStatus;
   statusHistory: { status: OrderStatus; timestamp: Date; note?: string }[];
+  deliveryOtp?: string;
 
   // Timestamps
   placedAt: Date;
@@ -228,7 +234,12 @@ const OrderSchema = new Schema<IOrder>(
     couponDiscount: { type: Number, default: 0, min: 0 },
     deliveryCharge: { type: Number, default: 0, min: 0 },
     platformFee: { type: Number, default: 0, min: 0 },
+    cgst: { type: Number, default: 0, min: 0 },
+    sgst: { type: Number, default: 0, min: 0 },
+    igst: { type: Number, default: 0, min: 0 },
     gst: { type: Number, default: 0, min: 0 },
+    gstRate: { type: Number, default: 18, min: 0 },
+    taxType: { type: String, default: "INTRA", uppercase: true },
     deliveryTip: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, required: true, min: 0 },
 
@@ -286,6 +297,8 @@ const OrderSchema = new Schema<IOrder>(
       type: [StatusHistorySchema],
       default: [],
     },
+
+    deliveryOtp: { type: String, trim: true },
 
     // ── Timestamps ──
     placedAt: { type: Date, default: Date.now },

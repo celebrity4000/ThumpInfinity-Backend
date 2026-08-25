@@ -10,6 +10,7 @@ import adminRoutes from "./routes/adminRoutes";
 import authRoutes from "./routes/authRoutes";
 import orderRoutes from "./routes/Orderroutes";
 import notificationRoute from "./routes/notificationsRoute";
+import categoryRoutes from "./routes/categoryRoutes";
 import { ensureDefaultAdmin } from "./controllers/Admincontroller";
 import { errorHandler } from "./middlewares/errorHandler";
 
@@ -23,8 +24,8 @@ if (!process.env.JWT_SECRET) {
 connectDB().then(() => ensureDefaultAdmin());
 
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // In server.ts or routes - TEMPORARY DEBUG
 app.get("/api/debug/product-images", async (req, res) => {
@@ -84,6 +85,8 @@ app.use("/api/stocks", stockRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/orders", orderRoutes); // ✅ Make sure this line exists!
 app.use("/api/notifications", notificationRoute); // ✅ Make sure this line exists!
+app.use("/api/categories", categoryRoutes);
+app.use("/api/admin/categories", categoryRoutes);
 app.use("/auth", authRoutes);
 
 app.use(errorHandler);

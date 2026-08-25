@@ -10,6 +10,7 @@ import {
   submitPaymentProof,
   verifyPaymentProof,
   getPaymentHistory,
+  calculateTax,
 } from "../controllers/Ordercontroller";
 import { protect } from "../middlewares/authMiddleware";
 import { adminAuth } from "../middlewares/adminAuth";
@@ -17,6 +18,7 @@ import { adminAuth } from "../middlewares/adminAuth";
 const router = Router();
 
 // Customer routes (User JWT)
+router.post("/calculate-tax", calculateTax);
 router.post("/", protect, placeOrder);
 router.get("/my", protect, getMyOrders);
 router.get("/payments/history", protect, getPaymentHistory);
