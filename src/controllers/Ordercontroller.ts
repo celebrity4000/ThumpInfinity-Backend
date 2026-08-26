@@ -1019,3 +1019,83 @@ export const calculateTax = async (
     sendError(res, err.message || "Tax calculation error", err);
   }
 };
+
+// ─── VERIFY DELIVERY OTP (Customer) ─────────────────────────────────────────
+// POST /api/orders/:id/verify-delivery-otp
+export const verifyDeliveryOtp = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const customerId = (req as any).user?._id;
+    const { id } = req.params;
+    const { otp } = req.body;
+
+    if (!otp || typeof otp !== "string") {
+      sendError(res, "Delivery OTP is required", undefined, 400);
+      return;
+    }
+
+    const filter: Record<string, unknown> = { _id: id };
+    if (customerId) filter.customer = customerId;
+
+    const order = await Order.findOne(filter);
+    if (!order) {
+      sendError(res, "Order not found", undefined, 404);
+      return;
+    }
+
+    if (order.status === "delivered" || order.status === "completed") {
+      sendError(res, "Order is already marked as Delivered", undefined, 400);
+      return;
+    }
+
+    if (order.status === "cancelled") {
+      sendError(res, "Cannot verify OTP for a cancelled order", undefined, 400);
+      return;
+    }
+
+    // Verify OTP matches
+    if (!order.deliveryOtp || order.deliveryOtp.trim() !== otp.trim()) {
+      sendError(res, "Invalid Delivery OTP. Please enter the correct 4-digit OTP.", undefined, 400);
+      return;
+    }
+
+    // Mark as delivered
+    order.status = "delivered";
+    order.deliveredAt = new Date();
+    if (order.paymentMethod === "cod" && order.paymentStatus !== "paid") {
+      order.paymentStatus = "paid";
+    }
+
+    order.statusHistory.push({
+      status: "delivered",
+      timestamp: new Date(),
+      note: "Order delivered & verified via Customer Delivery OTP",
+    });
+
+    await order.save();
+
+    // Send push notification to customer
+    try {
+      await sendPushNotification(
+        order.customer.toString(),
+        "Order Delivered! 📬",
+        `Your order #${order.orderNumber} has been verified with Delivery OTP and marked as Delivered. Thank you!`,
+        {
+          type: "order_delivered",
+          orderId: order._id.toString(),
+          orderNumber: order.orderNumber,
+          screen: "/(tabs)/myorders",
+        },
+      );
+    } catch (pushErr) {
+      console.error("Failed to send push notification on OTP verification:", pushErr);
+    }
+
+    sendSuccess(res, "Delivery OTP verified! Order marked as Delivered successfully.", order);
+  } catch (error) {
+    next(error);
+  }
+};

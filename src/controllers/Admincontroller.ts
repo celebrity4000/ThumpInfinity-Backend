@@ -598,25 +598,26 @@ export const uploadQRCode = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    if (!req.file) {
-      sendError(res, "QR code image is required", undefined, 400);
-      return;
+    const settings = await (AdminSettings as any).getSettings();
+
+    // Upload to Cloudinary if file provided
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, "qr-codes");
+      settings.qrCodeUrl = result.secure_url;
     }
 
-    // Upload to Cloudinary
-    const result = await uploadToCloudinary(req.file.buffer, "qr-codes");
+    if (req.body.upiId !== undefined) {
+      settings.upiId = req.body.upiId.trim();
+    }
 
-    // Save URL to admin settings
-    const settings = await (AdminSettings as any).getSettings();
-    settings.qrCodeUrl = result.secure_url;
-
-    if (req.body.upiId) {
-      settings.upiId = req.body.upiId;
+    if (!req.file && req.body.upiId === undefined && !settings.qrCodeUrl) {
+      sendError(res, "QR code image or UPI ID is required", undefined, 400);
+      return;
     }
 
     await settings.save();
 
-    sendSuccess(res, "QR code uploaded successfully", {
+    sendSuccess(res, "Payment QR & UPI ID updated successfully", {
       qrCodeUrl: settings.qrCodeUrl,
       upiId: settings.upiId,
     });

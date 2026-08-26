@@ -11,6 +11,7 @@ import {
   verifyPaymentProof,
   getPaymentHistory,
   calculateTax,
+  verifyDeliveryOtp,
 } from "../controllers/Ordercontroller";
 import { protect } from "../middlewares/authMiddleware";
 import { adminAuth } from "../middlewares/adminAuth";
@@ -25,6 +26,7 @@ router.get("/payments/history", protect, getPaymentHistory);
 router.get("/:id", protect, getOrderById);
 router.patch("/:id/cancel", protect, cancelOrder);
 router.patch("/:id/payment-proof", protect, submitPaymentProof);
+router.post("/:id/verify-delivery-otp", protect, verifyDeliveryOtp);
 
 // Admin routes (Admin JWT)
 router.get("/", adminAuth, getAllOrders);
