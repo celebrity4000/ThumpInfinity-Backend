@@ -1,6 +1,7 @@
 // src/utils/taxUtils.ts
 
 export interface GSTCalculationResult {
+  taxableAmount: number;
   cgst: number;
   sgst: number;
   igst: number;
@@ -15,10 +16,12 @@ export interface GSTCalculationResult {
 }
 
 /**
- * Calculates Indian GST breakdown based on Customer's State.
+ * Calculates Indian GST breakdown based on Customer's State (GST-Inclusive Formula).
+ * Taxable Amount = Subtotal * 100 / (100 + GST Rate)
+ * GST Amount = Subtotal - Taxable Amount
  * Default seller home state is "Delhi".
- * - Intra-State (Same State, e.g., Delhi): CGST (9%) + SGST (9%)
- * - Inter-State (Different State, e.g., MH, UP, KA, etc.): IGST (18%)
+ * - Intra-State (Same State): CGST (9%) + SGST (9%)
+ * - Inter-State (Different State): IGST (18%)
  */
 export const calculateGSTByState = (
   subtotal: number,
@@ -38,20 +41,21 @@ export const calculateGSTByState = (
     normCustomerState === normSellerState ||
     (isDelhi(normCustomerState) && isDelhi(normSellerState));
 
-  const totalGstRate = totalGstPercent / 100;
+  // GST Inclusive Formula
+  const taxableAmount = Math.round((subtotal * 100 / (100 + totalGstPercent)) * 100) / 100;
+  const totalGstAmount = Math.round((subtotal - taxableAmount) * 100) / 100;
 
   if (isSameState) {
     // Intra-State: Split into CGST (half) & SGST (half)
-    const halfRate = totalGstRate / 2; // e.g. 0.09 (9%)
-    const cgst = Math.round(subtotal * halfRate * 100) / 100;
-    const sgst = Math.round(subtotal * halfRate * 100) / 100;
-    const gst = Math.round((cgst + sgst) * 100) / 100;
+    const cgst = Math.round((totalGstAmount / 2) * 100) / 100;
+    const sgst = Math.round((totalGstAmount - cgst) * 100) / 100;
 
     return {
+      taxableAmount,
       cgst,
       sgst,
       igst: 0,
-      gst,
+      gst: totalGstAmount,
       gstRate: totalGstPercent,
       cgstRate: totalGstPercent / 2,
       sgstRate: totalGstPercent / 2,
@@ -62,13 +66,12 @@ export const calculateGSTByState = (
     };
   } else {
     // Inter-State: Full IGST
-    const igst = Math.round(subtotal * totalGstRate * 100) / 100;
-
     return {
+      taxableAmount,
       cgst: 0,
       sgst: 0,
-      igst,
-      gst: igst,
+      igst: totalGstAmount,
+      gst: totalGstAmount,
       gstRate: totalGstPercent,
       cgstRate: 0,
       sgstRate: 0,

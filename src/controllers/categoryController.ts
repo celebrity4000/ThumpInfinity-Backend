@@ -196,3 +196,63 @@ export const uploadCategoryImage = async (req: Request, res: Response): Promise<
     sendError(res, err.message || "Failed to upload category image", err, 500);
   }
 };
+
+/**
+ * POST /api/categories
+ * Admin endpoint to create a new category.
+ */
+export const createCategory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, icon, color, order, imageUrl, isActive } = req.body;
+
+    if (!name || !name.trim()) {
+      sendError(res, "Category name is required", null, 400);
+      return;
+    }
+
+    const normId = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    const existing = await Category.findOne({ categoryId: normId });
+    if (existing) {
+      sendError(res, `Category "${name.trim()}" already exists`, null, 400);
+      return;
+    }
+
+    const cat = new Category({
+      categoryId: normId,
+      name: name.trim(),
+      icon: icon || "📱",
+      color: color || "#008080",
+      imageUrl: imageUrl || "",
+      order: order !== undefined ? Number(order) : 99,
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+    });
+
+    await cat.save();
+
+    sendSuccess(res, "Category created successfully", cat, 201);
+  } catch (err: any) {
+    sendError(res, err.message || "Failed to create category", err, 500);
+  }
+};
+
+/**
+ * DELETE /api/categories/:categoryId
+ * Admin endpoint to delete a category.
+ */
+export const deleteCategory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId } = req.params;
+    const normId = categoryId.trim().toLowerCase();
+
+    const cat = await Category.findOneAndDelete({ categoryId: normId });
+    if (!cat) {
+      sendError(res, "Category not found", null, 404);
+      return;
+    }
+
+    sendSuccess(res, "Category deleted successfully", cat, 200);
+  } catch (err: any) {
+    sendError(res, err.message || "Failed to delete category", err, 500);
+  }
+};

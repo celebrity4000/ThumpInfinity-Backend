@@ -5,18 +5,22 @@ import {
   getAllCategoriesAdmin,
   updateCategory,
   uploadCategoryImage,
+  createCategory,
+  deleteCategory,
 } from "../controllers/categoryController";
 import { adminAuth } from "../middlewares/adminAuth";
 import { uploadSingleImage } from "../middlewares/upload";
 
 const router = Router();
 
-// Category Routes (support both /admin/all, /all, and /)
+// Category Routes
 router.get("/admin/all", getAllCategoriesAdmin);
 router.get("/all", getAllCategoriesAdmin);
 router.get("/", getCategories);
 
+router.post("/", adminAuth, createCategory);
 router.patch("/:categoryId", adminAuth, updateCategory);
+router.delete("/:categoryId", adminAuth, deleteCategory);
 router.post("/:categoryId/image", adminAuth, uploadSingleImage, uploadCategoryImage);
 
 export default router;

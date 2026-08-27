@@ -192,21 +192,19 @@ export const placeOrder = async (
       return;
     }
 
-    // ── Calculate state-based GST breakdown (CGST, SGST, IGST) ──
+    // ── Calculate state-based GST breakdown (CGST, SGST, IGST - GST Inclusive) ──
     const subtotal = enriched.reduce((sum, i) => sum + i.lineTotal, 0);
-    const taxCalc = calculateGSTByState(subtotal, state);
     const parsedCouponDiscount = Math.max(0, Number(couponDiscount) || 0);
+    const netSubtotal = Math.max(0, subtotal - parsedCouponDiscount);
+    const taxCalc = calculateGSTByState(netSubtotal, state);
     const parsedDeliveryCharge = Math.max(0, Number(deliveryCharge) || 0);
     const parsedPlatformFee = Math.max(0, Number(platformFee) || 0);
-    const parsedGst = taxCalc.gst;
     const parsedDeliveryTip = Math.max(0, Number(deliveryTip) || 0);
 
     const totalAmount =
-      subtotal -
-      parsedCouponDiscount +
+      netSubtotal +
       parsedDeliveryCharge +
       parsedPlatformFee +
-      parsedGst +
       parsedDeliveryTip;
 
     // ── Minimum order check ──
@@ -293,6 +291,7 @@ export const placeOrder = async (
         phone,
       },
       subtotal,
+      taxableAmount: taxCalc.taxableAmount,
       couponCode: couponCode || undefined,
       couponDiscount: parsedCouponDiscount,
       deliveryCharge: parsedDeliveryCharge,
