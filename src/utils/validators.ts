@@ -193,6 +193,16 @@ export const singleProductSchema = z.object({
     .transform((v) => v === true || v === "true" || v === "yes" || v === "1")
     .optional()
     .default(false),
+  gstRate: z
+    .string()
+    .or(z.number())
+    .transform((v) => parseInt(String(v), 10))
+    .refine(
+      (v) => [0, 5, 12, 18, 28].includes(v),
+      "GST rate must be 0, 5, 12, 18, or 28",
+    )
+    .optional()
+    .default(18),
 });
 
 // ─── CSV Row Schema (for bulk INSERT) ─────────────────────────────────────────
@@ -261,6 +271,11 @@ export const csvRowSchema = z.object({
         : [],
     )
     .default(""),
+  gst_rate: z
+    .string()
+    .optional()
+    .transform((v) => (v ? parseInt(v, 10) : 18))
+    .default("18"),
 });
 
 // ─── CSV Row Schema for Bulk UPDATE ──────────────────────────────────────────
@@ -337,6 +352,10 @@ export const csvUpdateRowSchema = z.object({
             .filter(Boolean)
         : undefined,
     ),
+  gst_rate: z
+    .string()
+    .optional()
+    .transform((v) => (v ? parseInt(v, 10) : undefined)),
 });
 
 // ─── CSV Row Schema for Bulk DELETE ──────────────────────────────────────────

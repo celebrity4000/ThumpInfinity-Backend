@@ -300,6 +300,7 @@ export const addSingleProduct = async (
       specifications: data.specifications || new Map(),
       images,
       tags: data.tags ?? [],
+      gstRate: data.gstRate !== undefined ? Number(data.gstRate) : 18,
       isFastMoving: data.isFastMoving ?? false,
       isFeatured: data.isFeatured ?? false,
     });
@@ -399,6 +400,7 @@ export const bulkUploadProducts = async (
           specifications: parseSpecifications(d.specifications),
           images,
           tags: d.tags,
+          gstRate: d.gst_rate !== undefined ? Number(d.gst_rate) : 18,
           isFastMoving: d.fast_moving,
           isFeatured: d.featured,
         });
@@ -903,6 +905,7 @@ export const updateProduct = async (
       description,
       specifications,
       tags,
+      gstRate,
       isFastMoving,
       isFeatured,
     } = req.body;
@@ -1021,6 +1024,13 @@ export const updateProduct = async (
         .split(",")
         .map((t: string) => t.trim())
         .filter(Boolean);
+    }
+
+    if (gstRate !== undefined) {
+      const g = Number(gstRate);
+      if ([0, 5, 12, 18, 28].includes(g)) {
+        product.gstRate = g;
+      }
     }
 
     if (isFastMoving !== undefined) {

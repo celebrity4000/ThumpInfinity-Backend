@@ -30,6 +30,7 @@ export interface IProduct extends Document {
   specifications?: Map<string, string>;
   images: IProductImage[];
   tags: string[];
+  gstRate?: number;
   isFastMoving: boolean;
   isFeatured: boolean;
   isActive: boolean;
@@ -158,6 +159,12 @@ const ProductSchema = new Schema<IProduct>(
     tags: {
       type: [String],
       default: [],
+    },
+    gstRate: {
+      type: Number,
+      enum: [0, 5, 12, 18, 28],
+      default: 18,
+      required: false,
     },
     isFastMoving: {
       type: Boolean,

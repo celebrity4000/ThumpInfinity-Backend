@@ -82,3 +82,85 @@ export const calculateGSTByState = (
     };
   }
 };
+
+export interface ItemForGST {
+  sellingPrice: number;
+  quantity: number;
+  gstRate?: number;
+}
+
+/**
+ * Calculates itemized GST for cart items with per-product GST rates (0%, 5%, 12%, 18%, 28%).
+ */
+export const calculateCartGSTByState = (
+  items: ItemForGST[],
+  customerState?: string,
+  sellerState: string = "Delhi"
+): GSTCalculationResult => {
+  const normCustomerState = (customerState || "Delhi").trim().toLowerCase();
+  const normSellerState = sellerState.trim().toLowerCase();
+
+  const isDelhi = (st: string) =>
+    st.includes("delhi") || st.includes("dl") || st.includes("ncr");
+
+  const isSameState =
+    normCustomerState === normSellerState ||
+    (isDelhi(normCustomerState) && isDelhi(normSellerState));
+
+  let totalTaxable = 0;
+  let totalGstAmount = 0;
+  let weightedGstRateSum = 0;
+  let totalSubtotal = 0;
+
+  for (const item of items) {
+    const rate = item.gstRate !== undefined ? Number(item.gstRate) : 18;
+    const lineTotal = (item.sellingPrice || 0) * (item.quantity || 1);
+    const taxable = (lineTotal * 100) / (100 + rate);
+    const gstAmt = lineTotal - taxable;
+
+    totalTaxable += taxable;
+    totalGstAmount += gstAmt;
+    totalSubtotal += lineTotal;
+    weightedGstRateSum += rate * lineTotal;
+  }
+
+  totalTaxable = Math.round(totalTaxable * 100) / 100;
+  totalGstAmount = Math.round(totalGstAmount * 100) / 100;
+  const effectiveGstRate =
+    totalSubtotal > 0 ? Math.round((weightedGstRateSum / totalSubtotal) * 10) / 10 : 18;
+
+  if (isSameState) {
+    const cgst = Math.round((totalGstAmount / 2) * 100) / 100;
+    const sgst = Math.round((totalGstAmount - cgst) * 100) / 100;
+
+    return {
+      taxableAmount: totalTaxable,
+      cgst,
+      sgst,
+      igst: 0,
+      gst: totalGstAmount,
+      gstRate: effectiveGstRate,
+      cgstRate: effectiveGstRate / 2,
+      sgstRate: effectiveGstRate / 2,
+      igstRate: 0,
+      taxType: "INTRA",
+      isIntraState: true,
+      state: customerState || sellerState,
+    };
+  } else {
+    return {
+      taxableAmount: totalTaxable,
+      cgst: 0,
+      sgst: 0,
+      igst: totalGstAmount,
+      gst: totalGstAmount,
+      gstRate: effectiveGstRate,
+      cgstRate: 0,
+      sgstRate: 0,
+      igstRate: effectiveGstRate,
+      taxType: "INTER",
+      isIntraState: false,
+      state: customerState || "Other",
+    };
+  }
+};

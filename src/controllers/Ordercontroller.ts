@@ -5,7 +5,7 @@ import User from "../models/Users";
 import { sendSuccess, sendError } from "../utils/response";
 import { sendPushNotification } from "../utils/pushNotification";
 import { sendNewOrderAdminEmail } from "../utils/email";
-import { calculateGSTByState } from "../utils/taxUtils";
+import { calculateGSTByState, calculateCartGSTByState } from "../utils/taxUtils";
 import { uploadBase64ToCloudinary } from "../utils/cloudinary";
 
 // In your order controller, update the validation section:
@@ -99,6 +99,7 @@ const enrichAndValidateItems = async (
       sellingPrice: product.sellingPrice,
       originalPrice: product.originalPrice,
       quantity: raw.quantity,
+      gstRate: product.gstRate !== undefined ? product.gstRate : 18,
       lineTotal: product.sellingPrice * raw.quantity,
     });
   }
@@ -196,7 +197,7 @@ export const placeOrder = async (
     const subtotal = enriched.reduce((sum, i) => sum + i.lineTotal, 0);
     const parsedCouponDiscount = Math.max(0, Number(couponDiscount) || 0);
     const netSubtotal = Math.max(0, subtotal - parsedCouponDiscount);
-    const taxCalc = calculateGSTByState(netSubtotal, state);
+    const taxCalc = calculateCartGSTByState(enriched, state);
     const parsedDeliveryCharge = Math.max(0, Number(deliveryCharge) || 0);
     const parsedPlatformFee = Math.max(0, Number(platformFee) || 0);
     const parsedDeliveryTip = Math.max(0, Number(deliveryTip) || 0);
