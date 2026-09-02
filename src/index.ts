@@ -11,6 +11,8 @@ import authRoutes from "./routes/authRoutes";
 import orderRoutes from "./routes/Orderroutes";
 import notificationRoute from "./routes/notificationsRoute";
 import categoryRoutes from "./routes/categoryRoutes";
+import returnRoutes from "./routes/returnRoutes";
+import complaintRoutes from "./routes/complaintRoutes";
 import { ensureDefaultAdmin } from "./controllers/Admincontroller";
 import { errorHandler } from "./middlewares/errorHandler";
 
@@ -86,6 +88,8 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/orders", orderRoutes); // ✅ Make sure this line exists!
 app.use("/api/notifications", notificationRoute); // ✅ Make sure this line exists!
 app.use("/api/categories", categoryRoutes);
+app.use("/api/returns", returnRoutes);
+app.use("/api/complaints", complaintRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/auth", authRoutes);
 

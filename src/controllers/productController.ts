@@ -790,6 +790,8 @@ export const getAllProducts = async (
       search,
       color,
       isActive,
+      poOnly,
+      type,
       sortBy = "createdAt",
       order = "desc",
     } = req.query;
@@ -800,16 +802,23 @@ export const getAllProducts = async (
 
     const filter: Record<string, unknown> = {};
 
-    // ── Apply isActive filter ──
-    if (isActive === "all") {
-      // Do not filter by isActive (returns both active and inactive)
-    } else if (isActive === "false") {
+    // ── Check if PO (Purchase Order) Catalogue filter ──
+    if (poOnly === "true" || type === "po") {
       filter.isActive = false;
-    } else if (isActive === "true") {
-      filter.isActive = true;
+      filter.stockQuantity = { $lte: 0 };
+      filter.enforceOrderLimits = true;
     } else {
-      // Default behavior (customer app)
-      filter.isActive = true;
+      // ── Apply isActive filter ──
+      if (isActive === "all") {
+        // Do not filter by isActive (returns both active and inactive)
+      } else if (isActive === "false") {
+        filter.isActive = false;
+      } else if (isActive === "true") {
+        filter.isActive = true;
+      } else {
+        // Default behavior (customer app)
+        filter.isActive = true;
+      }
     }
 
     if (category) filter.category = (category as string).toLowerCase();
