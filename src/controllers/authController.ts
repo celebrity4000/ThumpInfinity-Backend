@@ -37,6 +37,7 @@ interface VerifyOtpBody {
 }
 
 interface CompleteProfileBody {
+  businessName?: string;
   contactName?: string;
   phone?: string;
   addressLine1?: string;
@@ -50,6 +51,7 @@ interface CompleteProfileBody {
 }
 
 interface UpdateProfileBody {
+  businessName?: string;
   contactName?: string;
   phone?: string;
   addressLine1?: string;
@@ -71,6 +73,7 @@ interface RemoveFCMTokenBody {
 }
 
 interface UserProfile {
+  businessName?: string;
   contactName: string;
   addressLine1: string;
   addressLine2: string;
@@ -511,6 +514,7 @@ const completeProfile = async (
       });
     }
     const {
+      businessName = "",
       contactName,
       phone,
       addressLine1,
@@ -588,6 +592,7 @@ const completeProfile = async (
       {
         $set: {
           phone: phone!.trim(),
+          "profile.businessName": businessName.trim(),
           "profile.contactName": contactName!.trim(),
           "profile.addressLine1": addressLine1!.trim(),
           "profile.addressLine2": addressLine2.trim(),
@@ -616,6 +621,7 @@ const completeProfile = async (
       gstTrimmed && isGstValid(gstTrimmed) ? "auto" : "manual";
 
     sendNewRegistrationEmail({
+      businessName: user.profile?.businessName || "",
       customerName: user.profile?.contactName || "New Customer",
       phone: user.phone || "",
       city: user.profile?.city,
@@ -703,6 +709,7 @@ const updateProfile = async (
     }
 
     const {
+      businessName,
       contactName,
       addressLine1,
       addressLine2 = "",
@@ -746,6 +753,7 @@ const updateProfile = async (
       req.user._id,
       {
         $set: {
+          ...(businessName !== undefined && { "profile.businessName": businessName.trim() }),
           "profile.contactName": contactName!.trim(),
           "profile.addressLine1": addressLine1!.trim(),
           "profile.addressLine2": addressLine2.trim(),

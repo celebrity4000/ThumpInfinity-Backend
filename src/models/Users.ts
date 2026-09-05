@@ -2,6 +2,7 @@ import mongoose, { Model, Schema, Document } from "mongoose";
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface IProfile {
+  businessName?: string;
   contactName?: string;
   addressLine1?: string;
   addressLine2?: string;
@@ -149,6 +150,7 @@ const UserSchema = new mongoose.Schema<IUser>(
 
     // ── Profile (filled at signup step 3) ─────────────
     profile: {
+      businessName: { type: String, trim: true, default: "" },
       contactName: { type: String, trim: true },
       addressLine1: { type: String, trim: true },
       addressLine2: { type: String, trim: true, default: "" },

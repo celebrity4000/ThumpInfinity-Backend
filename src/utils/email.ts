@@ -12,6 +12,7 @@ const ADMIN_PANEL_URL =
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 interface NewRegistrationEmailData {
+  businessName?: string;
   customerName: string;
   phone: string;
   city?: string;
