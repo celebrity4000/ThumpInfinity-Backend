@@ -529,6 +529,7 @@ const completeProfile = async (
 
     // ── Validate required fields ──
     const missing: string[] = [];
+    if (!businessName?.trim()) missing.push("businessName");
     if (!contactName?.trim()) missing.push("contactName");
     if (!phone?.trim()) missing.push("phone");
     if (!addressLine1?.trim()) missing.push("addressLine1");
@@ -721,6 +722,7 @@ const updateProfile = async (
 
     // ── Validate required fields ──
     const missing: string[] = [];
+    if (!businessName?.trim()) missing.push("businessName");
     if (!contactName?.trim()) missing.push("contactName");
     if (!addressLine1?.trim()) missing.push("addressLine1");
     if (!city?.trim()) missing.push("city");
