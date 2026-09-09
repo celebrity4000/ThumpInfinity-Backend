@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import Order from "../models/Order";
 import ReturnRequest from "../models/ReturnRequest";
 import { sendSuccess, sendError } from "../utils/response";
@@ -109,6 +109,9 @@ export const createReturnRequest = async (
       photos: Array.isArray(photos) ? photos : [],
       status: "pending",
     });
+
+    // Mark order as having a return request
+    await Order.findByIdAndUpdate(orderId, { hasReturn: true });
 
     sendSuccess(res, "Purchase Return Request submitted successfully!", { returnRequest: returnReq }, 201);
   } catch (error) {

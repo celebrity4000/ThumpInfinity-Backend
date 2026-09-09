@@ -108,6 +108,8 @@ export interface IOrder extends Document {
   status: OrderStatus;
   statusHistory: { status: OrderStatus; timestamp: Date; note?: string }[];
   deliveryOtp?: string;
+  hasComplaint?: boolean;
+  hasReturn?: boolean;
 
   // Timestamps
   placedAt: Date;
@@ -301,6 +303,8 @@ const OrderSchema = new Schema<IOrder>(
     },
 
     deliveryOtp: { type: String, trim: true },
+    hasComplaint: { type: Boolean, default: false },
+    hasReturn: { type: Boolean, default: false },
 
     // ── Timestamps ──
     placedAt: { type: Date, default: Date.now },

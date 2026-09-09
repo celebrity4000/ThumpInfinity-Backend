@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import Order from "../models/Order";
 import Complaint from "../models/Complaint";
 import { sendSuccess, sendError } from "../utils/response";
@@ -109,6 +109,9 @@ export const createComplaint = async (
       photos: Array.isArray(photos) ? photos : [],
       status: "pending",
     });
+
+    // Mark order as having a complaint
+    await Order.findByIdAndUpdate(orderId, { hasComplaint: true });
 
     sendSuccess(res, "Complaint filed successfully! Our team will inspect and reach out.", { complaint }, 201);
   } catch (error) {

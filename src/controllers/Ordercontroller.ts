@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import Order, { OrderStatus } from "../models/Order";
 import Product from "../models/Product";
 import User from "../models/Users";
+import Complaint from "../models/Complaint";
+import ReturnRequest from "../models/ReturnRequest";
 import { sendSuccess, sendError } from "../utils/response";
 import { sendPushNotification } from "../utils/pushNotification";
 import { sendNewOrderAdminEmail } from "../utils/email";
@@ -428,14 +430,29 @@ export const getMyOrders = async (
     const filter: Record<string, unknown> = { customer: customerId };
     if (status) filter.status = status;
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, userComplaints, userReturns] = await Promise.all([
       Order.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
         .lean(),
       Order.countDocuments(filter),
+      Complaint.find({ customer: customerId }).select("order").lean(),
+      ReturnRequest.find({ customer: customerId }).select("order").lean(),
     ]);
+
+    const complaintOrderIds = new Set((userComplaints || []).map((c: any) => c.order?.toString()));
+    const returnOrderIds = new Set((userReturns || []).map((r: any) => r.order?.toString()));
+
+    orders.forEach((o: any) => {
+      const orderIdStr = o._id.toString();
+      if (complaintOrderIds.has(orderIdStr)) {
+        o.hasComplaint = true;
+      }
+      if (returnOrderIds.has(orderIdStr)) {
+        o.hasReturn = true;
+      }
+    });
 
     await Promise.all(orders.map((o) => ensureOrderDeliveryOtp(o)));
 
