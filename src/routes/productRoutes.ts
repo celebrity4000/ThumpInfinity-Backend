@@ -17,6 +17,8 @@ import {
   replaceProductImages,
   toggleProductStatus,
   deleteProduct,
+  previewGoogleSheet,
+  syncGoogleSheet,
 } from "../controllers/productController";
 import { uploadMultipleImages, uploadBulkFile } from "../middlewares/upload";
 
@@ -65,6 +67,12 @@ router.post(
   handleUpload(uploadBulkFile as RequestHandler),
   bulkDeleteProducts,
 );
+
+// POST /api/products/google-sheet/preview - Fetch rows from Google Sheet URL
+router.post("/google-sheet/preview", previewGoogleSheet);
+
+// POST /api/products/google-sheet/sync - Sync inventory directly from Google Sheet URL
+router.post("/google-sheet/sync", syncGoogleSheet);
 
 // GET /api/products - Get all products with filtering and pagination
 router.get("/", getAllProducts);

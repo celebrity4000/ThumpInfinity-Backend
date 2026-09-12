@@ -10,6 +10,7 @@ import {
   csvDeleteRowSchema,
 } from "../utils/validators";
 import { parseFileBuffer } from "../utils/fileParser";
+import { fetchAndParseGoogleSheet } from "../utils/googleSheetHelper";
 import { sendSuccess, sendError } from "../utils/response";
 import { UploadApiResponse } from "cloudinary";
 import mongoose from "mongoose";
@@ -1319,5 +1320,116 @@ export const deleteProduct = async (
     sendSuccess(res, "Product deleted successfully");
   } catch (error) {
     next(error);
+  }
+};
+
+// ─── GOOGLE SHEETS PREVIEW ───────────────────────────────────────────────────
+// POST /api/products/google-sheet/preview
+export const previewGoogleSheet = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { url } = req.body as { url: string };
+    if (!url || typeof url !== "string" || !url.trim()) {
+      sendError(res, "Google Sheet URL or Spreadsheet ID is required.", undefined, 400);
+      return;
+    }
+
+    const rawRows = await fetchAndParseGoogleSheet(url);
+    sendSuccess(res, "Google Sheet data fetched successfully", {
+      totalRows: rawRows.length,
+      rows: rawRows,
+    });
+  } catch (error) {
+    sendError(res, error instanceof Error ? error.message : "Failed to fetch Google Sheet data.");
+  }
+};
+
+// ─── GOOGLE SHEETS SYNC ──────────────────────────────────────────────────────
+// POST /api/products/google-sheet/sync
+export const syncGoogleSheet = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { url, operation = "update" } = req.body as { url: string; operation?: "add" | "update" | "delete" };
+    if (!url || typeof url !== "string" || !url.trim()) {
+      sendError(res, "Google Sheet URL or Spreadsheet ID is required.", undefined, 400);
+      return;
+    }
+
+    const rawRows = await fetchAndParseGoogleSheet(url);
+    if (!rawRows.length) {
+      sendError(res, "Google Sheet is empty or has no data rows.");
+      return;
+    }
+
+    let updatedCount = 0;
+    let createdCount = 0;
+    let deletedCount = 0;
+    let skippedCount = 0;
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      const sku = (row.sku || row.SKU || "").toString().trim();
+
+      if (!sku) {
+        skippedCount++;
+        continue;
+      }
+
+      const product = await Product.findOne({ sku });
+
+      if (operation === "delete") {
+        if (product) {
+          await product.deleteOne();
+          deletedCount++;
+        } else {
+          skippedCount++;
+        }
+        continue;
+      }
+
+      if (operation === "update" || (operation === "add" && product)) {
+        if (!product) {
+          skippedCount++;
+          continue;
+        }
+
+        const updateFields: Record<string, unknown> = {};
+        if (row.name || row.Name) updateFields.name = (row.name || row.Name).toString().trim();
+        if (row.price || row.Price || row.sellingPrice) updateFields.sellingPrice = Number(row.price || row.Price || row.sellingPrice);
+        if (row.stock || row.Stock || row.stockQuantity) updateFields.stockQuantity = Number(row.stock || row.Stock || row.stockQuantity);
+        if (row.brand || row.Brand) updateFields.brand = (row.brand || row.Brand).toString().trim();
+        if (row.category || row.Category) updateFields.category = (row.category || row.Category).toString().trim().toLowerCase();
+
+        await Product.updateOne({ sku }, { $set: updateFields });
+        updatedCount++;
+      } else if (operation === "add" && !product) {
+        await Product.create({
+          sku,
+          name: row.name || row.Name || "Unnamed Product",
+          sellingPrice: Number(row.price || row.Price || row.sellingPrice) || 0,
+          stockQuantity: Number(row.stock || row.Stock || row.stockQuantity) || 0,
+          brand: (row.brand || row.Brand || "").toString().trim(),
+          category: (row.category || row.Category || "uncategorized").toString().trim().toLowerCase(),
+          description: (row.description || row.Description || "").toString().trim(),
+        });
+        createdCount++;
+      }
+    }
+
+    sendSuccess(res, "Google Sheet sync completed successfully", {
+      totalRows: rawRows.length,
+      createdCount,
+      updatedCount,
+      deletedCount,
+      skippedCount,
+    });
+  } catch (error) {
+    sendError(res, error instanceof Error ? error.message : "Failed to sync Google Sheet.");
   }
 };
