@@ -7,22 +7,22 @@ import { sendSuccess, sendError } from "../utils/response";
 
 // Default Categories Seed List (matching mobile app defaults)
 const DEFAULT_CATEGORIES = [
-  { id: "all", name: "All", icon: "📱", color: "#FF6B6B", order: 0 },
-  { id: "charging-cables", name: "Charging Cables", icon: "🔌", color: "#4CAF50", order: 1 },
-  { id: "chargers-adapters", name: "Chargers & Adapters", icon: "⚡", color: "#FF9800", order: 2 },
-  { id: "power-banks", name: "Power Banks", icon: "🔋", color: "#2196F3", order: 3 },
-  { id: "headphones-earphones", name: "Headphones & Earphones", icon: "🎧", color: "#9C27B0", order: 4 },
-  { id: "speakers", name: "Speakers", icon: "🔊", color: "#E91E63", order: 5 },
-  { id: "screen-protectors", name: "Screen Protectors", icon: "🛡️", color: "#607D8B", order: 6 },
-  { id: "cases-covers", name: "Cases & Covers", icon: "📱", color: "#795548", order: 7 },
-  { id: "mounts-stands", name: "Mounts & Stands", icon: "📐", color: "#00BCD4", order: 8 },
-  { id: "cables-connectors", name: "Cables & Connectors", icon: "🔗", color: "#FF5722", order: 9 },
-  { id: "storage-devices", name: "Storage Devices", icon: "💾", color: "#3F51B5", order: 10 },
-  { id: "gaming-accessories", name: "Gaming Accessories", icon: "🎮", color: "#8BC34A", order: 11 },
-  { id: "smartwatch-accessories", name: "Smartwatch Acc.", icon: "⌚", color: "#FFC107", order: 12 },
-  { id: "keyboard-mouse", name: "Keyboard & Mouse", icon: "⌨️", color: "#009688", order: 13 },
-  { id: "webcam-microphone", name: "Webcam & Microphone", icon: "📹", color: "#673AB7", order: 14 },
-  { id: "other-accessories", name: "Other Accessories", icon: "🔧", color: "#F44336", order: 15 },
+  { id: "all", name: "All", icon: "", color: "#FF6B6B", order: 0 },
+  { id: "charging-cables", name: "Charging Cables", icon: "", color: "#4CAF50", order: 1 },
+  { id: "chargers-adapters", name: "Chargers & Adapters", icon: "", color: "#FF9800", order: 2 },
+  { id: "power-banks", name: "Power Banks", icon: "", color: "#2196F3", order: 3 },
+  { id: "headphones-earphones", name: "Headphones & Earphones", icon: "", color: "#9C27B0", order: 4 },
+  { id: "speakers", name: "Speakers", icon: "", color: "#E91E63", order: 5 },
+  { id: "screen-protectors", name: "Screen Protectors", icon: "", color: "#607D8B", order: 6 },
+  { id: "cases-covers", name: "Cases & Covers", icon: "", color: "#795548", order: 7 },
+  { id: "mounts-stands", name: "Mounts & Stands", icon: "", color: "#00BCD4", order: 8 },
+  { id: "cables-connectors", name: "Cables & Connectors", icon: "", color: "#FF5722", order: 9 },
+  { id: "storage-devices", name: "Storage Devices", icon: "", color: "#3F51B5", order: 10 },
+  { id: "gaming-accessories", name: "Gaming Accessories", icon: "", color: "#8BC34A", order: 11 },
+  { id: "smartwatch-accessories", name: "Smartwatch Acc.", icon: "", color: "#FFC107", order: 12 },
+  { id: "keyboard-mouse", name: "Keyboard & Mouse", icon: "", color: "#009688", order: 13 },
+  { id: "webcam-microphone", name: "Webcam & Microphone", icon: "", color: "#673AB7", order: 14 },
+  { id: "other-accessories", name: "Other Accessories", icon: "", color: "#F44336", order: 15 },
 ];
 
 /**
@@ -44,7 +44,7 @@ const syncCategoriesWithProducts = async () => {
         await Category.create({
           categoryId: normId,
           name: formattedName || catName,
-          icon: "📱",
+          icon: "",
           color: "#008080",
           imageUrl: "",
           isActive: true,

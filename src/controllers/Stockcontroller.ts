@@ -3,6 +3,7 @@ import Product from "../models/Product";
 import StockAlert from "../models/StockAlert";
 import { sendSuccess, sendError } from "../utils/response";
 import { sendPushNotification } from "../utils/pushNotification";
+import { filterProductsFuzzy } from "../utils/fuzzySearch";
 
 // ─── Helper: Send stock alerts when product is restocked ──────────────────────
 const sendStockAlerts = async (
@@ -131,10 +132,12 @@ export const getStockList = async (
       compatibility,
       color,
       warranty,
+      stockStatus,
+      stockFilter,
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10));
-    const limitNum = Math.min(100, parseInt(limit as string, 10));
+    const limitNum = Math.min(10000, parseInt(limit as string, 10));
     const skip = (pageNum - 1) * limitNum;
 
     const filter: Record<string, unknown> = { isActive: true };
@@ -148,16 +151,66 @@ export const getStockList = async (
     if (warranty) filter.warranty = warranty as string;
     if (compatibility)
       filter.compatibility = { $in: [compatibility as string] };
-    if (search) filter.$text = { $search: search as string };
+    // ── Handle stock status filter ──
+    const rawStatus = (stockStatus || stockFilter || "") as string;
+    const lower = decodeURIComponent(rawStatus).replace(/[\+_\-\s]/g, "").toLowerCase();
 
-    const [products, total] = await Promise.all([
-      Product.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Product.countDocuments(filter),
-    ]);
+    if (lower === "outofstock" || lower === "out" || lower.includes("out")) {
+      filter.stockQuantity = { $lte: 0 };
+    } else if (lower === "lowstock" || lower === "low" || lower.includes("low")) {
+      filter.stockQuantity = { $gt: 0, $lte: 10 };
+    } else if (lower === "instock" || lower === "in" || lower.includes("in")) {
+      filter.stockQuantity = { $gt: 10 };
+    }
+
+    // Remove text index search from base filter so we can run multi-tier search
+    delete filter.$text;
+
+    let products: any[] = [];
+    let total = 0;
+
+    if (search && (search as string).trim()) {
+      const searchStr = (search as string).trim();
+      const searchRegex = new RegExp(searchStr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+
+      // Tier 1: Exact text index / regex substring match
+      const tier1Filter = {
+        ...filter,
+        $or: [
+          { name: { $regex: searchRegex } },
+          { brand: { $regex: searchRegex } },
+          { category: { $regex: searchRegex } },
+          { tags: { $regex: searchRegex } },
+          { sku: { $regex: searchRegex } },
+        ],
+      };
+
+      const tier1Count = await Product.countDocuments(tier1Filter);
+
+      if (tier1Count > 0) {
+        products = await Product.find(tier1Filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .lean();
+        total = tier1Count;
+      } else {
+        // Tier 2 & 3: Fuzzy search across candidate products matching the base filters
+        const candidateProducts = await Product.find(filter).lean();
+        const fuzzyMatched = filterProductsFuzzy(candidateProducts, searchStr);
+        total = fuzzyMatched.length;
+        products = fuzzyMatched.slice(skip, skip + limitNum);
+      }
+    } else {
+      [products, total] = await Promise.all([
+        Product.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .lean(),
+        Product.countDocuments(filter),
+      ]);
+    }
 
     sendSuccess(res, "Stock list fetched successfully", {
       products,

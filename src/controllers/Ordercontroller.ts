@@ -260,22 +260,27 @@ export const placeOrder = async (
       }
     }
 
-    // ── Determine Payment Proof Status ──
+    // ── Determine effective payment method & proof status ──
+    let finalPaymentMethod = paymentMethod;
+    if (appliedCredit > 0 && remainingPayable === 0) {
+      finalPaymentMethod = "wallet";
+    }
+
     const hasProof = Boolean(finalPaymentProofUrl);
     const initialPaymentStatus = remainingPayable === 0
       ? "paid"
-      : paymentMethod === "cod" 
+      : finalPaymentMethod === "cod" 
       ? "pending" 
       : hasProof 
       ? "proof_submitted" 
       : "pending";
-    const initialProofStatus = paymentMethod === "cod" || remainingPayable === 0
+    const initialProofStatus = finalPaymentMethod === "cod" || remainingPayable === 0
       ? "none"
       : hasProof
       ? "submitted"
       : "none";
 
-    const isAutoApproved = paymentMethod === "cod" || remainingPayable === 0;
+    const isAutoApproved = finalPaymentMethod === "cod" || remainingPayable === 0;
     const initialDeliveryOtp = isAutoApproved
       ? Math.floor(1000 + Math.random() * 9000).toString()
       : undefined;
@@ -309,7 +314,7 @@ export const placeOrder = async (
       totalAmount,
       creditAmountApplied: appliedCredit,
       remainingAmountPayable: remainingPayable,
-      paymentMethod,
+      paymentMethod: finalPaymentMethod,
       paymentStatus: initialPaymentStatus,
       transactionId: transactionId || undefined,
       chequeNumber: chequeNumber || undefined,
@@ -736,7 +741,7 @@ export const getAllOrders = async (
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10));
-    const limitNum = Math.min(100, parseInt(limit as string, 10));
+    const limitNum = Math.min(10000, parseInt(limit as string, 10));
     const skip = (pageNum - 1) * limitNum;
 
     // ✅ Filter out orders with deleted customers by default
@@ -1116,3 +1121,26 @@ export const verifyDeliveryOtp = async (
     next(error);
   }
 };
+
+// ─── DELETE ORDER (admin) ─────────────────────────────────────────────────────
+// DELETE /api/orders/:id  — admin only
+export const deleteOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findByIdAndDelete(id);
+
+    if (!order) {
+      sendError(res, "Order not found", undefined, 404);
+      return;
+    }
+
+    sendSuccess(res, "Order deleted permanently", { id });
+  } catch (error) {
+    next(error);
+  }
+};
+

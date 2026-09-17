@@ -12,6 +12,7 @@ import {
   getPaymentHistory,
   calculateTax,
   verifyDeliveryOtp,
+  deleteOrder,
 } from "../controllers/Ordercontroller";
 import { protect } from "../middlewares/authMiddleware";
 import { adminAuth } from "../middlewares/adminAuth";
@@ -33,5 +34,7 @@ router.get("/", adminAuth, getAllOrders);
 router.patch("/:id/status", adminAuth, updateOrderStatus);
 router.patch("/:id/payment-status", adminAuth, updateOrderPaymentStatus);
 router.patch("/:id/verify-proof", adminAuth, verifyPaymentProof);
+router.delete("/:id", adminAuth, deleteOrder);
 
 export default router;
+

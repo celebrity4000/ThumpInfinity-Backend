@@ -20,6 +20,7 @@ import {
 } from "../utils/googleDriveParser";
 import { sendPushNotification } from "../utils/pushNotification";
 import User from "../models/Users";
+import { filterProductsFuzzy } from "../utils/fuzzySearch";
 
 // ─── Helper: upload a Buffer to Cloudinary ────────────────────────────────────
 const uploadBufferToCloudinary = (
@@ -795,10 +796,12 @@ export const getAllProducts = async (
       type,
       sortBy = "createdAt",
       order = "desc",
+      stockStatus,
+      stockFilter,
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10));
-    const limitNum = Math.min(100, parseInt(limit as string, 10));
+    const limitNum = Math.min(10000, parseInt(limit as string, 10));
     const skip = (pageNum - 1) * limitNum;
 
     const filter: Record<string, unknown> = {};
@@ -829,23 +832,68 @@ export const getAllProducts = async (
     if (color) filter.color = color as string;
     if (compatibility)
       filter.compatibility = { $in: [compatibility as string] };
+
+    // ── Handle stock status filter ──
+    const rawStatus = (stockStatus || stockFilter || "") as string;
+    const lower = decodeURIComponent(rawStatus).replace(/[\+_\-\s]/g, "").toLowerCase();
+
+    if (lower === "outofstock" || lower === "out" || lower.includes("out")) {
+      filter.stockQuantity = { $lte: 0 };
+    } else if (lower === "lowstock" || lower === "low" || lower.includes("low")) {
+      filter.stockQuantity = { $gt: 0, $lte: 10 };
+    } else if (lower === "instock" || lower === "in" || lower.includes("in")) {
+      filter.stockQuantity = { $gt: 10 };
+    } else if (lower === "fastmoving" || lower.includes("fast")) {
+      filter.isFastMoving = true;
+    } else if (lower === "featured") {
+      filter.isFeatured = true;
+    }
     const projection: Record<string, any> = {};
     let sortObj: Record<string, any> = {
       [sortBy as string]: order === "desc" ? -1 : 1,
     };
 
-    if (search) {
-      filter.$text = { $search: search as string };
-      projection.score = { $meta: "textScore" };
-      if (sortBy === "createdAt") {
-        sortObj = { score: { $meta: "textScore" } };
-      }
-    }
+    let products: any[] = [];
+    let total = 0;
 
-    const [products, total] = await Promise.all([
-      Product.find(filter, projection).sort(sortObj).skip(skip).limit(limitNum).lean(),
-      Product.countDocuments(filter),
-    ]);
+    if (search && (search as string).trim()) {
+      const searchStr = (search as string).trim();
+      const searchRegex = new RegExp(searchStr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+
+      // Tier 1: Exact text index / regex substring match
+      const tier1Filter = {
+        ...filter,
+        $or: [
+          { name: { $regex: searchRegex } },
+          { brand: { $regex: searchRegex } },
+          { category: { $regex: searchRegex } },
+          { tags: { $regex: searchRegex } },
+          { sku: { $regex: searchRegex } },
+        ],
+      };
+
+      const tier1Count = await Product.countDocuments(tier1Filter);
+
+      if (tier1Count > 0) {
+        products = await Product.find(tier1Filter, projection)
+          .sort(sortObj)
+          .skip(skip)
+          .limit(limitNum)
+          .lean();
+        total = tier1Count;
+      } else {
+        // Tier 2 & 3: Fuzzy search across candidate products matching the base filters
+        const candidateProducts = await Product.find(filter).lean();
+        const fuzzyMatched = filterProductsFuzzy(candidateProducts, searchStr);
+        total = fuzzyMatched.length;
+        products = fuzzyMatched.slice(skip, skip + limitNum);
+      }
+    } else {
+      [products, total] = await Promise.all([
+        Product.find(filter, projection).sort(sortObj).skip(skip).limit(limitNum).lean(),
+        Product.countDocuments(filter),
+      ]);
+    }
 
     sendSuccess(res, "Products fetched successfully", {
       products,

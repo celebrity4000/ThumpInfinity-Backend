@@ -54,7 +54,10 @@ export type PaymentMethod =
   | "bank_transfer"
   | "cod"
   | "card"
-  | "netbanking";
+  | "netbanking"
+  | "wallet"
+  | "credit_balance";
+
 
 export type PaymentStatus =
   | "pending"
@@ -254,7 +257,16 @@ const OrderSchema = new Schema<IOrder>(
     // ── Payment ──
     paymentMethod: {
       type: String,
-      enum: ["cheque", "upi", "bank_transfer", "cod", "card", "netbanking"],
+      enum: [
+        "cheque",
+        "upi",
+        "bank_transfer",
+        "cod",
+        "card",
+        "netbanking",
+        "wallet",
+        "credit_balance",
+      ],
       default: "upi",
     },
     paymentStatus: {
