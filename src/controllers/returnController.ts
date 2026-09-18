@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import Order from "../models/Order";
 import ReturnRequest from "../models/ReturnRequest";
 import { sendSuccess, sendError } from "../utils/response";
+import { sendPushNotification } from "../utils/pushNotification";
 
 /**
  * GET /api/returns/purchased-products
@@ -26,6 +27,19 @@ export const getPurchasedProducts = async (
       .sort({ createdAt: -1 })
       .lean();
 
+    // Fetch existing return requests for this customer to cross-reference status
+    const existingReturns = await ReturnRequest.find({ customer: customerId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const returnMap = new Map<string, any>();
+    existingReturns.forEach((r) => {
+      const key = `${r.order.toString()}_${r.product.toString()}`;
+      if (!returnMap.has(key)) {
+        returnMap.set(key, r);
+      }
+    });
+
     const purchasedItems: Array<{
       orderId: string;
       orderNumber: string;
@@ -36,21 +50,27 @@ export const getPurchasedProducts = async (
       productPrice: number;
       quantity: number;
       billNumber: string;
+      returnRequest?: any;
     }> = [];
 
     deliveredOrders.forEach((order) => {
       (order.items || []).forEach((item: any) => {
         const primaryImg = item.images?.find((img: any) => img.isPrimary) || item.images?.[0];
+        const pId = item.product ? item.product.toString() : item._id.toString();
+        const key = `${order._id.toString()}_${pId}`;
+        const activeReturn = returnMap.get(key) || null;
+
         purchasedItems.push({
           orderId: order._id.toString(),
           orderNumber: order.orderNumber,
           orderDate: order.deliveredAt || order.placedAt || order.createdAt,
-          productId: item.product ? item.product.toString() : item._id.toString(),
+          productId: pId,
           productName: item.name,
           productImage: item.imageUrl || primaryImg?.url || "https://via.placeholder.com/150",
           productPrice: item.sellingPrice || 0,
           quantity: item.quantity || 1,
           billNumber: order.orderNumber,
+          returnRequest: activeReturn,
         });
       });
     });
@@ -92,6 +112,24 @@ export const createReturnRequest = async (
 
     if (!orderId || !productId || !billNumber || !reason || !description) {
       sendError(res, "Please fill in all required fields (Order, Product, Bill #, Reason & Description).", undefined, 400);
+      return;
+    }
+
+    // Check if return request already exists for this order & product
+    const existingReq = await ReturnRequest.findOne({
+      order: orderId,
+      product: productId,
+      customer: customerId,
+      status: { $in: ["pending", "approved", "completed"] },
+    });
+
+    if (existingReq) {
+      sendError(
+        res,
+        `A return request has already been filed for this product (${existingReq.status.toUpperCase()}).`,
+        undefined,
+        400
+      );
       return;
     }
 
@@ -151,7 +189,7 @@ export const getAllReturnRequestsAdmin = async (
 ): Promise<void> => {
   try {
     const requests = await ReturnRequest.find()
-      .populate("customer", "contactName phone email profile")
+      .populate("customer", "contactName name phone email profile")
       .populate("order", "orderNumber totalAmount status")
       .sort({ createdAt: -1 })
       .lean();
@@ -189,6 +227,28 @@ export const updateReturnStatusAdmin = async (
     returnReq.status = status;
     if (adminNote) returnReq.adminNote = adminNote;
     await returnReq.save();
+
+    // Trigger FCM & DB push notification to customer
+    try {
+      const statusLabels: Record<string, string> = {
+        approved: "APPROVED",
+        rejected: "REJECTED",
+        completed: "COMPLETED",
+      };
+      const formattedStatus = statusLabels[status] || status.toUpperCase();
+      const title = `Return Request ${formattedStatus}`;
+      const noteText = adminNote ? ` Admin note: ${adminNote}` : "";
+      const body = `Your return request for "${returnReq.productName}" (Order: ${returnReq.billNumber}) has been updated to ${formattedStatus}.${noteText}`;
+
+      await sendPushNotification(returnReq.customer.toString(), title, body, {
+        type: "approval_status",
+        screen: "purchasereturn",
+        status,
+        returnId: returnReq._id.toString(),
+      });
+    } catch (pushErr) {
+      console.error("Failed to send push notification for return status:", pushErr);
+    }
 
     sendSuccess(res, `Return request ${status} successfully`, { returnRequest: returnReq });
   } catch (error) {
