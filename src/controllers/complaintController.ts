@@ -22,7 +22,7 @@ export const getEligibleProducts = async (
 
     const orders = await Order.find({
       customer: customerId,
-      status: { $ne: "cancelled" },
+      status: { $in: ["delivered", "completed"] },
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -112,6 +112,18 @@ export const createComplaint = async (
 
     if (!orderId || !productId || !billNumber || !reason || !description) {
       sendError(res, "Please fill in all required fields (Bill Number, Reason & Description).", undefined, 400);
+      return;
+    }
+
+    // Verify that the order is delivered or completed
+    const targetOrder = await Order.findOne({
+      _id: orderId,
+      customer: customerId,
+      status: { $in: ["delivered", "completed"] },
+    });
+
+    if (!targetOrder) {
+      sendError(res, "Complaints can only be filed for delivered or completed orders.", undefined, 400);
       return;
     }
 

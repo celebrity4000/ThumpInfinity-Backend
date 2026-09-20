@@ -707,11 +707,13 @@ export const updateOrderPaymentStatus = async (
         body = `Refund of ₹${order.totalAmount} for Order ${order.orderNumber} has been processed.`;
       }
 
+      const isPaymentFailed = paymentStatus === "failed" || paymentStatus === "rejected";
       await sendPushNotification(order.customer.toString(), title, body, {
-        type: "order_status_update",
+        type: isPaymentFailed ? "payment_failed" : "order_status_update",
         orderId: order._id.toString(),
         status: paymentStatus,
-        screen: "/(tabs)/myorders",
+        screen: isPaymentFailed ? "/(tabs)/myorders?tab=payment_failed" : "/(tabs)/myorders",
+        tab: isPaymentFailed ? "payment_failed" : undefined,
       });
     } catch (pushErr) {
       console.error("Failed to send push notification on payment status update:", pushErr);
@@ -945,7 +947,8 @@ export const verifyPaymentProof = async (
           {
             type: "payment_rejected",
             orderId: order._id.toString(),
-            screen: "/(tabs)/myorders",
+            screen: "/(tabs)/myorders?tab=payment_failed",
+            tab: "payment_failed",
           },
         );
       } catch (err) {
