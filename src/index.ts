@@ -1,4 +1,4 @@
-import "dotenv/config"; 
+import "dotenv/config";
 
 import express, { Request, Response } from "express";
 import cors from "cors";
@@ -82,16 +82,16 @@ app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Product Management API is running 🚀" });
 });
 
-app.use("/api/products", productRoutes);
-app.use("/api/stocks", stockRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/orders", orderRoutes); // ✅ Make sure this line exists!
-app.use("/api/notifications", notificationRoute); // ✅ Make sure this line exists!
-app.use("/api/categories", categoryRoutes);
-app.use("/api/returns", returnRoutes);
-app.use("/api/complaints", complaintRoutes);
-app.use("/api/admin/categories", categoryRoutes);
-app.use("/auth", authRoutes);
+// app.use("/api/products", productRoutes);
+// app.use("/api/stocks", stockRoutes);
+// app.use("/api/admin", adminRoutes);
+// app.use("/api/orders", orderRoutes);
+// app.use("/api/notifications", notificationRoute);
+// app.use("/api/categories", categoryRoutes);
+// app.use("/api/returns", returnRoutes);
+// app.use("/api/complaints", complaintRoutes);
+// app.use("/api/admin/categories", categoryRoutes);
+// app.use("/auth", authRoutes);
 
 app.use(errorHandler);
 
