@@ -1,9 +1,19 @@
-import "dotenv/config";
+import "dotenv/config"; 
 
 import express, { Request, Response } from "express";
 import cors from "cors";
 import connectDB from "./config/db";
 import "./config/cloudinary";
+import productRoutes from "./routes/productRoutes";
+import stockRoutes from "./routes/Stockroutes";
+import adminRoutes from "./routes/adminRoutes";
+import authRoutes from "./routes/authRoutes";
+import orderRoutes from "./routes/Orderroutes";
+import notificationRoute from "./routes/notificationsRoute";
+import categoryRoutes from "./routes/categoryRoutes";
+import returnRoutes from "./routes/returnRoutes";
+import complaintRoutes from "./routes/complaintRoutes";
+import { ensureDefaultAdmin } from "./controllers/Admincontroller";
 import { errorHandler } from "./middlewares/errorHandler";
 
 const app = express();
@@ -71,6 +81,17 @@ app.post("/test-notification/:userId", async (req: Request, res: Response) => {
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Product Management API is running 🚀" });
 });
+
+app.use("/api/products", productRoutes);
+app.use("/api/stocks", stockRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/notifications", notificationRoute); 
+app.use("/api/categories", categoryRoutes);
+app.use("/api/returns", returnRoutes);
+app.use("/api/complaints", complaintRoutes);
+app.use("/api/admin/categories", categoryRoutes);
+app.use("/auth", authRoutes);
 
 app.use(errorHandler);
 
