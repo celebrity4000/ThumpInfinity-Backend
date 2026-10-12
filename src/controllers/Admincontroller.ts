@@ -204,6 +204,8 @@ export const changePassword = async (
 };
 
 // ─── GET ALL CUSTOMERS ────────────────────────────────────────────────────
+// Only users who have finished registration (isProfileComplete = true)
+// are returned. Half-registered users are hidden from the admin panel.
 export const getCustomers = async (
   req: Request,
   res: Response,
@@ -215,7 +217,10 @@ export const getCustomers = async (
     const limitNum = Math.min(200, parseInt(limit as string, 10));
     const skip = (pageNum - 1) * limitNum;
 
-    const filter: Record<string, unknown> = { role: { $ne: "admin" } };
+    const filter: Record<string, unknown> = {
+      role: { $ne: "admin" },
+      isProfileComplete: true, // ← hide users who haven't completed registration
+    };
 
     if (search && search !== "") {
       const searchStr = search as string;
@@ -466,7 +471,10 @@ export const getCustomerById = async (
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id).select("-__v").lean();
+    // Incomplete registrations are not visible to admins
+    const user = await User.findOne({ _id: id, isProfileComplete: true })
+      .select("-__v")
+      .lean();
     if (!user) {
       sendError(res, "Customer not found", undefined, 404);
       return;
@@ -492,27 +500,29 @@ export const sendManualPush = async (
       return;
     }
 
+    // Base filter: only registered (profile-complete), active customers
+    const baseFilter = {
+      role: "customer",
+      isActive: true,
+      isProfileComplete: true,
+    };
+
     let targetUsers: any[] = [];
 
     switch (targetType) {
       case "all":
-        targetUsers = await User.find({
-          role: "customer",
-          isActive: true,
-        }).lean();
+        targetUsers = await User.find(baseFilter).lean();
         break;
       case "pending":
         targetUsers = await User.find({
-          role: "customer",
+          ...baseFilter,
           approvalStatus: { $in: ["pending", "manual"] },
-          isActive: true,
         }).lean();
         break;
       case "approved":
         targetUsers = await User.find({
-          role: "customer",
+          ...baseFilter,
           approvalStatus: { $in: ["approved", "auto"] },
-          isActive: true,
         }).lean();
         break;
       case "specific":
@@ -525,16 +535,12 @@ export const sendManualPush = async (
           return;
         }
         targetUsers = await User.find({
+          ...baseFilter,
           _id: { $in: selectedUsers },
-          role: "customer",
-          isActive: true,
         }).lean();
         break;
       default:
-        targetUsers = await User.find({
-          role: "customer",
-          isActive: true,
-        }).lean();
+        targetUsers = await User.find(baseFilter).lean();
     }
 
     let sentCount = 0;
@@ -766,7 +772,11 @@ export const manageCustomerCredit = async (
     user.creditTransactions.push({
       amount: numAmount,
       type: type === "credit" ? "credit" : "debit",
-      description: note || (type === "credit" ? "Credit added by admin" : "Credit debited by admin"),
+      description:
+        note ||
+        (type === "credit"
+          ? "Credit added by admin"
+          : "Credit debited by admin"),
       createdAt: new Date(),
     });
 
@@ -774,9 +784,10 @@ export const manageCustomerCredit = async (
 
     // Notify customer via FCM Push Notification
     const title = type === "credit" ? "💳 Credit Added! 🎉" : "💳 Credit Updated";
-    const body = type === "credit"
-      ? `Admin added ₹${numAmount} credit to your account! Available Credit: ₹${user.creditBalance}.`
-      : `₹${numAmount} was deducted from your credit balance. Remaining Credit: ₹${user.creditBalance}.`;
+    const body =
+      type === "credit"
+        ? `Admin added ₹${numAmount} credit to your account! Available Credit: ₹${user.creditBalance}.`
+        : `₹${numAmount} was deducted from your credit balance. Remaining Credit: ₹${user.creditBalance}.`;
 
     sendPushNotification(user._id.toString(), title, body, {
       type: "credit_update",
