@@ -1,4 +1,4 @@
-import "dotenv/config"; 
+import "dotenv/config";
 
 import express, { Request, Response } from "express";
 import cors from "cors";
@@ -23,60 +23,40 @@ if (!process.env.JWT_SECRET) {
   throw new Error("FATAL: JWT_SECRET is not set. Check your .env file.");
 }
 
-connectDB().then(() => ensureDefaultAdmin());
+connectDB()
+  .then(() => ensureDefaultAdmin())
+  .catch((err) => {
+    console.error("❌ DB connection failed:", err);
+    process.exit(1);
+  });
 
-app.use(cors());
+// ─── CORS ──────────────────────────────────────────────────────────────────────
+// Mobile apps send no Origin header, so they are allowed through.
+// Add any extra frontend/admin domains here (or via ALLOWED_ORIGINS env,
+// comma-separated).
+const allowedOrigins = [
+  "https://thumpinfinity.com",
+  "https://www.thumpinfinity.com",
+  ...(process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : []),
+];
+
+if (process.env.NODE_ENV !== "production") {
+  allowedOrigins.push("http://localhost:5173", "http://localhost:3000");
+}
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
+  }),
+);
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-// In server.ts or routes - TEMPORARY DEBUG
-app.get("/api/debug/product-images", async (req, res) => {
-  try {
-    const Product = require("./models/Product").default;
-    const products = await Product.find({}).limit(5).lean();
-    const summary = products.map((p: { name: any; images: any[] }) => ({
-      name: p.name,
-      imagesCount: p.images?.length || 0,
-      images: p.images?.map((img: any) => ({
-        url: img.url?.substring(0, 80),
-        publicId: img.publicId,
-        isPrimary: img.isPrimary,
-      })),
-    }));
-    res.json({ success: true, total: products.length, products: summary });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Add this in server.ts before your routes
-app.post("/test-notification/:userId", async (req: Request, res: Response) => {
-  try {
-    const mongoose = require("mongoose");
-    const Notification = require("./models/Notification").default;
-    const userId = req.params.userId;
-
-    console.log("🧪 Testing notification creation for user:", userId);
-
-    const testNotif = await Notification.create({
-      user: new mongoose.Types.ObjectId(userId),
-      type: "manual_broadcast",
-      title: "Test Notification " + Date.now(),
-      body: "This is a test notification.",
-      isRead: false,
-    });
-
-    console.log("✅ Test notification created:", testNotif._id);
-
-    const total = await Notification.countDocuments();
-    console.log("📦 Total notifications:", total);
-
-    res.json({ success: true, notification: testNotif, total });
-  } catch (error: any) {
-    console.error("❌ Error:", error.message);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Product Management API is running 🚀" });
@@ -86,7 +66,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/stocks", stockRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/orders", orderRoutes);
-app.use("/api/notifications", notificationRoute); 
+app.use("/api/notifications", notificationRoute);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/complaints", complaintRoutes);
@@ -96,7 +76,7 @@ app.use("/auth", authRoutes);
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
 
 export default app;
